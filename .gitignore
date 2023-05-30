@@ -1,2 +1,6 @@
 target
 **/target
+
+# This directory is created by the prometheus process
+# Could be removed once we persist the data somewhere else
+data
