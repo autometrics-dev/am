@@ -24,7 +24,7 @@ async fn main() {
     match result {
         Ok(_) => debug!("Command completed successfully"),
         Err(err) => {
-            error!("Command failed: {:#}", err);
+            error!("Command failed: {:?}", err);
             std::process::exit(1);
         }
     }

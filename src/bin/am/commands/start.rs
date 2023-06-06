@@ -17,6 +17,7 @@ use serde::Deserialize;
 use std::fs::File;
 use std::io::{self, BufWriter, Write};
 use std::net::SocketAddr;
+#[cfg(unix)]
 use std::os::unix::prelude::PermissionsExt;
 use std::path::PathBuf;
 use std::vec;
@@ -29,7 +30,7 @@ use url::Url;
 // for keep-alives if we are making multiple requests to the same host.
 static CLIENT: Lazy<reqwest::Client> = Lazy::new(|| {
     reqwest::Client::builder()
-        .user_agent("am/0.1.0")
+        .user_agent(concat!("am/", env!("CARGO_PKG_VERSION")))
         .build()
         .expect("Unable to create reqwest client")
 });
@@ -64,17 +65,17 @@ pub struct Arguments {
 
 pub async fn handle_command(args: Arguments) -> Result<()> {
     if args.metrics_endpoints.is_empty() && args.enable_gateway {
-        warn!("No metrics endpoints specified and not gateway was enabled");
+        warn!("No metrics endpoints specified and gateway is not enabled");
     }
 
-    // First let's create a directory for our application to store data in.
+    // First let's retrieve the directory for our application to store data in.
     let project_dirs =
         ProjectDirs::from("", "autometrics", "am").context("Unable to determine home directory")?;
     let local_data = project_dirs.data_local_dir().to_owned();
 
     // Make sure that the local data directory exists for our application.
     std::fs::create_dir_all(&local_data)
-        .context(format!("Unable to create data directory: {:?}", local_data))?;
+        .with_context(|| format!("Unable to create data directory: {:?}", local_data))?;
 
     let mut handles = vec![];
 
@@ -178,7 +179,10 @@ async fn download_prometheus(
             io::copy(&mut entry, &mut dst_file).context("Copying to file")?;
 
             let mut perms = dst_file.metadata()?.permissions();
-            perms.set_mode(0o755); // TODO: this will only work on unix
+
+            #[cfg(unix)]
+            perms.set_mode(0o755);
+
             dst_file.set_permissions(perms)?;
 
             break;
