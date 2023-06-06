@@ -1,13 +1,13 @@
-use std::io;
-
-use anyhow::{Context, Ok, Result};
+use anyhow::{Context, Result};
 use clap::Parser;
 use directories::ProjectDirs;
+use std::io;
 use tracing::{debug, info};
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
 pub struct Arguments {
+    /// Force the cleanup without asking for confirmation.
     #[clap(short, long, default_value = "false")]
     force: bool,
 }
@@ -15,7 +15,7 @@ pub struct Arguments {
 pub async fn handle_command(args: Arguments) -> Result<()> {
     // If the users hasn't specified the `force` argument, then ask the user if
     // they want to continue.
-    if args.force == false && ask_continue_prune().await == false {
+    if !args.force && !ask_continue_prune().await {
         anyhow::bail!("Pruning cancelled")
     }
 

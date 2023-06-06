@@ -17,7 +17,7 @@ pub enum SubCommands {
     /// interface to inspect the autometrics data.
     Start(start::Arguments),
 
-    ///
+    /// Manage am related system settings.
     System(system::Arguments),
 }
 

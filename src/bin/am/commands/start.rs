@@ -21,6 +21,7 @@ use std::os::unix::prelude::PermissionsExt;
 use std::path::PathBuf;
 use std::vec;
 use tokio::process;
+use tracing::log::warn;
 use tracing::{debug, error, info, trace};
 use url::Url;
 
@@ -33,27 +34,39 @@ static CLIENT: Lazy<reqwest::Client> = Lazy::new(|| {
         .expect("Unable to create reqwest client")
 });
 
-// TODO: add support for tls; the hyper client does not come with TLS support.
-//       maybe we should just use reqwest for everything?
 // Create a hyper client that will be used to make HTTP requests. This allows
 // for keep-alives if we are making multiple requests to the same host.
+// TODO: add support for tls; the hyper client does not come with TLS support.
+//       maybe we should just use reqwest for everything?
 static HYPER_CLIENT: Lazy<hyper::client::Client<HttpConnector>> =
     Lazy::new(hyper::client::Client::new);
 
 #[derive(Parser, Clone)]
 pub struct Arguments {
-    /// The endpoints to scrape metrics from.
+    /// The endpoint(s) that Prometheus will scrape.
     metrics_endpoints: Vec<Url>,
 
-    /// The prometheus version to use. Leave empty to use the latest version.
+    /// The Prometheus version to use. Leave empty to use the latest version.
     #[clap(long, env)]
     prometheus_version: Option<String>,
 
+    /// The listen address for the web server of am.
+    ///
+    /// This includes am's HTTP API, the explorer and the proxy to the Prometheus, Gateway, etc.
     #[clap(short, long, env, default_value = "127.0.0.1:6789")]
     listen_address: SocketAddr,
+
+    /// Startup the gateway as well.
+    // TODO: Actually implement that we use this
+    #[clap(short, long, env)]
+    enable_gateway: bool,
 }
 
 pub async fn handle_command(args: Arguments) -> Result<()> {
+    if args.metrics_endpoints.is_empty() && args.enable_gateway {
+        warn!("No metrics endpoints specified and not gateway was enabled");
+    }
+
     // First let's create a directory for our application to store data in.
     let project_dirs =
         ProjectDirs::from("", "autometrics", "am").context("Unable to determine home directory")?;
@@ -341,7 +354,7 @@ async fn prometheus_handler(mut req: http::Request<Body>) -> impl IntoResponse {
 
     let res = HYPER_CLIENT.request(req).await;
 
-    // TODO: Maybe we can add a warn! if the response was not 2xx
+    // TODO: Could be useful to add a `warn!` if the response was not 2xx
 
     match res {
         Ok(res) => res.into_response(),
