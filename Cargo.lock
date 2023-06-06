@@ -109,7 +109,6 @@ dependencies = [
  "flate2",
  "futures-util",
  "http",
- "hyper",
  "include_dir",
  "once_cell",
  "remove_dir_all",
