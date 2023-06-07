@@ -7,3 +7,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- Initial release
+- Instead of only copying the prometheus binary, simply extract everything (#17)
