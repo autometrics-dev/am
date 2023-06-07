@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use autometrics_am::prometheus;
 use axum::body::{self, Body};
 use axum::extract::Path;
@@ -141,7 +141,8 @@ async fn download_prometheus(
     prometheus_binary_path: &PathBuf,
     prometheus_version: &str,
 ) -> Result<()> {
-    let (os, arch) = determine_os_and_arch();
+    let (os, arch) = determine_os_and_arch()?;
+
     // TODO: Grab the checksum file and retrieve the checksum for the archive
     let archive_path = {
         let tmp_file = tempfile::NamedTempFile::new()?;
@@ -186,18 +187,18 @@ async fn download_prometheus(
 
 /// Translates the OS and arch provided by Rust to the convention used by
 /// Prometheus.
-fn determine_os_and_arch() -> (&'static str, &'static str) {
+fn determine_os_and_arch() -> Result<(&'static str, &'static str)> {
     use std::env::consts::{ARCH, OS};
 
     let os = match OS {
         "linux" => "linux",
         "macos" => "darwin",
-        "dragonfly" => "dragonfly",
+        "windows" => "windows",
         "freebsd" => "freebsd",
         "netbsd" => "netbsd",
         "openbsd" => "openbsd",
-        "windows" => "windows",
-        _ => panic!("Unsupported OS: {}", OS),
+        "dragonfly" => "dragonfly",
+        _ => bail!(format!("Unsupported OS: {}", ARCH)),
     };
 
     let arch = match ARCH {
@@ -208,10 +209,10 @@ fn determine_os_and_arch() -> (&'static str, &'static str) {
         "powerpc64" => "powerpc64", // NOTE: Do we use this one, or the le one?
         // "mips" => "mips", // NOTE: Not sure which mips to pick in this situation
         // "arm" => "arm", // NOTE: Not sure which arm to pick in this situation
-        _ => panic!("Unsupported architecture: {}", ARCH),
+        _ => bail!(format!("Unsupported architecture: {}", ARCH)),
     };
 
-    (os, arch)
+    Ok((os, arch))
 }
 
 /// Generate a Prometheus configuration file.
@@ -330,7 +331,11 @@ async fn explorer_handler(Path(path): Path<String>) -> impl IntoResponse {
         Some(file) => Response::builder()
             .status(StatusCode::OK)
             .body(body::boxed(body::Full::from(file.contents())))
-            .unwrap(),
+            .map(|res| res.into_response())
+            .unwrap_or_else(|err| {
+                error!("Failed to build response: {}", err);
+                StatusCode::INTERNAL_SERVER_ERROR.into_response()
+            }),
     }
 }
 
