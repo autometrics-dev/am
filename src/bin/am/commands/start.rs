@@ -14,10 +14,8 @@ use include_dir::{include_dir, Dir};
 use once_cell::sync::Lazy;
 use serde::Deserialize;
 use std::fs::File;
-use std::io::{self, BufWriter, Write};
+use std::io::{BufWriter, Write};
 use std::net::SocketAddr;
-#[cfg(unix)]
-use std::os::unix::prelude::PermissionsExt;
 use std::path::PathBuf;
 use std::vec;
 use tokio::process;
@@ -83,7 +81,7 @@ pub async fn handle_command(args: Arguments) -> Result<()> {
         info!("Using Prometheus version: {}", prometheus_version);
 
         let prometheus_binary_path =
-            prometheus_local_data.join(format!("prometheus_{}", prometheus_version));
+            prometheus_local_data.join(format!("prometheus_{}/prometheus", prometheus_version));
 
         // Check if prom is available at "some" location
         if !prometheus_binary_path.exists() {
@@ -136,11 +134,8 @@ async fn get_latest_prometheus_version() -> Result<String> {
 }
 
 /// Download the specified Prometheus version from GitHub and extract the
-/// prometheus binary to `prometheus_binary_path`.
-async fn download_prometheus(
-    prometheus_binary_path: &PathBuf,
-    prometheus_version: &str,
-) -> Result<()> {
+/// archive into `prometheus_path`.
+async fn download_prometheus(prometheus_path: &PathBuf, prometheus_version: &str) -> Result<()> {
     let (os, arch) = determine_os_and_arch()?;
 
     // TODO: Grab the checksum file and retrieve the checksum for the archive
@@ -165,21 +160,18 @@ async fn download_prometheus(
     let file = File::open(archive_path)?;
     let tar_file = GzDecoder::new(file);
     let mut ar = tar::Archive::new(tar_file);
+
+    // This prefix will be removed from the files in the archive.
+    let prefix = format!("prometheus-{prometheus_version}.{os}-{arch}/");
+
     for entry in ar.entries()? {
         let mut entry = entry?;
-        if entry.path()?.ends_with("prometheus") {
-            let mut dst_file = File::create(prometheus_binary_path)?;
-            io::copy(&mut entry, &mut dst_file).context("Copying to file")?;
 
-            let mut perms = dst_file.metadata()?.permissions();
+        // Remove the prefix and join it with the base directory.
+        let path = entry.path()?.strip_prefix(&prefix)?.to_owned();
+        let path = prometheus_path.join(path);
 
-            #[cfg(unix)]
-            perms.set_mode(0o755);
-
-            dst_file.set_permissions(perms)?;
-
-            break;
-        }
+        entry.unpack(&path)?;
     }
 
     Ok(())
