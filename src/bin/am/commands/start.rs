@@ -34,6 +34,7 @@ static CLIENT: Lazy<reqwest::Client> = Lazy::new(|| {
 
 #[derive(Parser, Clone)]
 pub struct Arguments {
+    #[clap(value_parser = endpoint_parser)]
     /// The endpoint(s) that Prometheus will scrape.
     metrics_endpoints: Vec<Url>,
 
@@ -392,5 +393,56 @@ fn convert_response(req: reqwest::Response) -> Response {
             error!("Error converting response: {:?}", err);
             StatusCode::INTERNAL_SERVER_ERROR.into_response()
         }
+    }
+}
+
+/// Parses the input string into a Url. This uses a custom parser to allow for
+/// some more flexible input.
+///
+/// Parsing adheres to the following rules:
+/// - The protocol should only allow for http and https, where http is the
+///   default.
+/// - The port should follow the default for the protocol, 80 for http and 443
+///   for https.
+/// - The path should default to /metrics if the path is empty. It should not be
+///   appended if a path is already there.
+fn endpoint_parser(input: &str) -> Result<Url> {
+    let mut input = input.to_owned();
+
+    // Prepend http:// if the input doesn't start with http:// or https://. Note
+    // that we do not support anything else.
+    if !input.starts_with("http://") && !input.starts_with("https://") {
+        input = format!("http://{}", input);
+    }
+
+    let mut url =
+        Url::parse(&input).with_context(|| format!("Unable to parse endpoint {}", input))?;
+
+    //  Note that this should never be Err(_) since we're always adding http://
+    // in front of the input and thus making sure it is not a "cannot-be-a-base"
+    // URL.
+    if url.path() == "" || url.path() == "/" {
+        url.set_path("/metrics");
+    }
+
+    Ok(url)
+}
+
+#[cfg(test)]
+mod tests {
+    use rstest::rstest;
+
+    #[rstest]
+    #[case("127.0.0.1", "http://127.0.0.1:80/metrics")]
+    #[case("https://127.0.0.1", "https://127.0.0.1:443/metrics")]
+    #[case("localhost:3030", "http://localhost:3030/metrics")]
+    #[case("localhost:3030/api/metrics", "http://localhost:3030/api/metrics")]
+    #[case(
+        "localhost:3030/api/observability",
+        "http://localhost:3030/api/observability"
+    )]
+    fn endpoint_parser(#[case] input: &str, #[case] expected: url::Url) {
+        let result = super::endpoint_parser(input).expect("expected no error");
+        assert_eq!(expected, result);
     }
 }
