@@ -414,9 +414,9 @@ fn endpoint_parser(input: &str) -> Result<Url> {
         input = format!("http://localhost{}", input);
     }
 
-    // Prepend http:// if the input doesn't start with http:// or https://. Note
-    // that we do not support anything else.
-    if !input.starts_with("http://") && !input.starts_with("https://") {
+    // Prepend http:// if the input does not contain ://. This is a rather naive
+    // check, but it should suffice for our purposes.
+    if !input.contains("://") {
         input = format!("http://{}", input);
     }
 
@@ -428,6 +428,10 @@ fn endpoint_parser(input: &str) -> Result<Url> {
     // URL.
     if url.path() == "" || url.path() == "/" {
         url.set_path("/metrics");
+    }
+
+    if url.scheme() != "http" && url.scheme() != "https" {
+        bail!("unsupported protocol {}", url.scheme());
     }
 
     Ok(url)
@@ -448,8 +452,17 @@ mod tests {
     )]
     #[case(":3000", "http://localhost:3000/metrics")]
     #[case(":3030/api/observability", "http://localhost:3030/api/observability")]
-    fn endpoint_parser(#[case] input: &str, #[case] expected: url::Url) {
+    fn endpoint_parser_ok(#[case] input: &str, #[case] expected: url::Url) {
         let result = super::endpoint_parser(input).expect("expected no error");
         assert_eq!(expected, result);
+    }
+
+    #[rstest]
+    #[case("ftp://localhost")]
+    #[case("not a valid url at all")]
+    fn endpoint_parser_error(#[case] input: &str) {
+        let _ = super::endpoint_parser(input).expect_err("expected a error");
+        // We're not checking which specific error occurred, just that a error
+        // occurred.
     }
 }
