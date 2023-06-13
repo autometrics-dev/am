@@ -68,6 +68,11 @@ pub async fn handle_command(args: Arguments) -> Result<()> {
     std::fs::create_dir_all(&local_data)
         .with_context(|| format!("Unable to create data directory: {:?}", local_data))?;
 
+    // check if the provided endpoint works
+    for endpoint in args.metrics_endpoints {
+        check_endpoint(&endpoint).await?;
+    }
+
     let mut handles = vec![];
 
     // Start Prometheus server
@@ -254,6 +259,17 @@ fn to_scrape_config(metric_endpoint: &Url) -> prometheus::ScrapeConfig {
         metrics_path: Some(metrics_path.to_string()),
         scheme,
     }
+}
+
+/// Checks whenever the endpoint works
+async fn check_endpoint(url: &Url) -> Result<()> {
+    let response = reqwest::get(url).await?.error_for_status()?;
+
+    if !response.status().is_success() {
+        bail!("Configure endpoint {url} did not return 2xx status code");
+    }
+
+    Ok(())
 }
 
 /// Start a prometheus process. This will block until the Prometheus process
