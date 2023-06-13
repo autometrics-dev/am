@@ -409,6 +409,11 @@ fn convert_response(req: reqwest::Response) -> Response {
 fn endpoint_parser(input: &str) -> Result<Url> {
     let mut input = input.to_owned();
 
+    if input.starts_with(':') {
+        // Prepend http://localhost if the input starts with a colon.
+        input = format!("http://localhost{}", input);
+    }
+
     // Prepend http:// if the input doesn't start with http:// or https://. Note
     // that we do not support anything else.
     if !input.starts_with("http://") && !input.starts_with("https://") {
@@ -441,6 +446,8 @@ mod tests {
         "localhost:3030/api/observability",
         "http://localhost:3030/api/observability"
     )]
+    #[case(":3000", "http://localhost:3000/metrics")]
+    #[case(":3030/api/observability", "http://localhost:3030/api/observability")]
     fn endpoint_parser(#[case] input: &str, #[case] expected: url::Url) {
         let result = super::endpoint_parser(input).expect("expected no error");
         assert_eq!(expected, result);
