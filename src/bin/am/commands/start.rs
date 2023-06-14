@@ -12,7 +12,6 @@ use futures_util::future::join_all;
 use http::{StatusCode, Uri};
 use include_dir::{include_dir, Dir};
 use once_cell::sync::Lazy;
-use serde::Deserialize;
 use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::net::SocketAddr;
@@ -38,9 +37,9 @@ pub struct Arguments {
     /// The endpoint(s) that Prometheus will scrape.
     metrics_endpoints: Vec<Url>,
 
-    /// The Prometheus version to use. Leave empty to use the latest version.
-    #[clap(long, env)]
-    prometheus_version: Option<String>,
+    /// The Prometheus version to use.
+    #[clap(long, env, default_value = "v2.44.0")]
+    prometheus_version: String,
 
     /// The listen address for the web server of am.
     ///
@@ -83,25 +82,22 @@ pub async fn handle_command(args: Arguments) -> Result<()> {
     let prometheus_args = args.clone();
     let prometheus_local_data = local_data.clone();
     let prometheus_handle = tokio::spawn(async move {
-        let prometheus_version = match prometheus_args.prometheus_version {
-            Some(version) => version,
-            None => get_latest_prometheus_version().await?,
-        };
+        let prometheus_version = args.prometheus_version.trim_start_matches('v');
 
         info!("Using Prometheus version: {}", prometheus_version);
 
-        let prometheus_binary_path =
-            prometheus_local_data.join(format!("prometheus_{}/prometheus", prometheus_version));
+        let prometheus_path =
+            prometheus_local_data.join(format!("prometheus-{}", prometheus_version));
 
         // Check if prom is available at "some" location
-        if !prometheus_binary_path.exists() {
+        if !prometheus_path.exists() {
             info!("Downloading prometheus");
-            download_prometheus(&prometheus_binary_path, &prometheus_version).await?;
-            info!("Downloaded to: {:?}", &prometheus_binary_path);
+            download_prometheus(&prometheus_path, prometheus_version).await?;
+            info!("Downloaded to: {:?}", &prometheus_path);
         }
 
         let prometheus_config = generate_prom_config(prometheus_args.metrics_endpoints)?;
-        start_prometheus(&prometheus_binary_path, &prometheus_config).await
+        start_prometheus(&prometheus_path, &prometheus_config).await
     });
     handles.push(prometheus_handle);
 
@@ -113,34 +109,6 @@ pub async fn handle_command(args: Arguments) -> Result<()> {
     join_all(handles).await;
 
     Ok(())
-}
-
-#[derive(Deserialize)]
-struct LatestRelease {
-    tag_name: String,
-}
-
-/// Retrieve the latest version of Prometheus.
-///
-/// This fn will resolve the release that is tagged as "latest" from GitHub and
-/// then return the version that is associated with that release. It will strip
-/// any leading "v" from the version string.
-async fn get_latest_prometheus_version() -> Result<String> {
-    debug!("Determining latest version of Prometheus");
-
-    let version = CLIENT
-        .get("https://api.github.com/repos/prometheus/prometheus/releases/latest")
-        .send()
-        .await
-        .context("Unable to retrieve latest version of Prometheus")?
-        .json::<LatestRelease>()
-        .await
-        .context("Unable to parse GitHub response")?
-        .tag_name
-        .trim_start_matches('v')
-        .to_string();
-
-    Ok(version)
 }
 
 /// Download the specified Prometheus version from GitHub and extract the
@@ -301,7 +269,7 @@ async fn start_prometheus(
     // TODO: Change the working directory, maybe make it configurable?
 
     info!("Starting prometheus");
-    let mut child = process::Command::new(prometheus_binary_path)
+    let mut child = process::Command::new(prometheus_binary_path.join("prometheus"))
         .arg(format!("--config.file={}", config_file_path.display()))
         .arg("--web.listen-address=:9090")
         .arg("--web.enable-lifecycle")
