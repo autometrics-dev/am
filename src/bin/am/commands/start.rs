@@ -20,8 +20,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 use std::vec;
 use tokio::process;
-use tracing::log::warn;
-use tracing::{debug, error, info, trace};
+use tracing::{debug, error, info, trace, warn};
 use url::Url;
 
 // Create a reqwest client that will be used to make HTTP requests. This allows
@@ -74,7 +73,7 @@ pub async fn handle_command(args: Arguments) -> Result<()> {
     // check if the provided endpoint works
     for endpoint in &args.metrics_endpoints {
         if let Err(err) = check_endpoint(endpoint).await {
-            warn!("Failed to contact endpoint: {err:?}");
+            warn!(?endpoint, "Failed to contact endpoint: {err:?}");
         }
     }
 
@@ -275,7 +274,7 @@ async fn check_endpoint(url: &Url) -> Result<()> {
         .await?;
 
     if !response.status().is_success() {
-        bail!("Configure endpoint {url} did not return 2xx status code");
+        bail!("endpoint did not return 2xx status code");
     }
 
     Ok(())
