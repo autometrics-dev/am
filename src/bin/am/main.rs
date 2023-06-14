@@ -41,7 +41,7 @@ async fn main() {
 /// within the `am` module, but will only show info for other modules.
 fn init_logging() -> Result<()> {
     // The filter layer controls which log levels to display.
-    let filter_layer = EnvFilter::from_default_env().add_directive(LevelFilter::INFO.into());
+    let filter_layer = EnvFilter::from_default_env(); //.add_directive(LevelFilter::INFO.into());
 
     let log_layer = tracing_subscriber::fmt::layer().with_writer(io::stderr);
 

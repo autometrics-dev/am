@@ -1,4 +1,4 @@
-use anyhow::{bail, Context, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use autometrics_am::prometheus;
 use axum::body::{self, Body};
 use axum::extract::Path;
@@ -11,6 +11,7 @@ use flate2::read::GzDecoder;
 use futures_util::future::join_all;
 use http::{StatusCode, Uri};
 use include_dir::{include_dir, Dir};
+use indicatif::{ProgressBar, ProgressIterator, ProgressState, ProgressStyle};
 use once_cell::sync::Lazy;
 use std::fs::File;
 use std::io::{BufWriter, Write};
@@ -125,33 +126,63 @@ async fn download_prometheus(prometheus_path: &PathBuf, prometheus_version: &str
             .await?
             .error_for_status()?;
 
+        let total_size = res
+            .content_length()
+            .ok_or_else(|| anyhow!("didn't receive content length"))?;
+        let mut downloaded = 0;
+
+        let pb = ProgressBar::new(total_size);
+
+        // https://github.com/console-rs/indicatif/blob/HEAD/examples/download.rs#L12
+        pb.set_style(ProgressStyle::with_template("{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {bytes}/{total_bytes} ({eta})")?
+            .with_key("eta", |state: &ProgressState, w: &mut dyn std::fmt::Write| write!(w, "{:.1}s", state.eta().as_secs_f64()).unwrap())
+            .progress_chars("=> "));
+
         let file = File::create(&tmp_file)?;
         let mut buffer = BufWriter::new(file);
 
         while let Some(ref chunk) = res.chunk().await? {
             buffer.write_all(chunk)?;
+
+            let new_size = (downloaded + chunk.len() as u64).min(total_size);
+            downloaded = new_size;
+
+            pb.set_position(downloaded);
         }
 
+        pb.finish_and_clear();
+        info!("Successfully downloaded Prometheus");
         tmp_file
     };
 
     let file = File::open(archive_path)?;
+
     let tar_file = GzDecoder::new(file);
     let mut ar = tar::Archive::new(tar_file);
 
     // This prefix will be removed from the files in the archive.
     let prefix = format!("prometheus-{prometheus_version}.{os}-{arch}/");
 
+    let pb = ProgressBar::new_spinner();
+    pb.set_style(ProgressStyle::default_spinner());
+    pb.enable_steady_tick(Duration::from_millis(120));
+    pb.set_message("Unpacking...");
+
     for entry in ar.entries()? {
         let mut entry = entry?;
+        let path = entry.path()?;
+
+        pb.set_message(format!("Unpacking {}", path.display()));
+        debug!("Unpacking {}", path.display());
 
         // Remove the prefix and join it with the base directory.
-        let path = entry.path()?.strip_prefix(&prefix)?.to_owned();
+        let path = path.strip_prefix(&prefix)?.to_owned();
         let path = prometheus_path.join(path);
 
         entry.unpack(&path)?;
     }
 
+    pb.finish_and_clear();
     Ok(())
 }
 
