@@ -17,6 +17,7 @@ use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::net::SocketAddr;
 use std::path::PathBuf;
+use std::time::Duration;
 use std::vec;
 use tokio::process;
 use tracing::log::warn;
@@ -68,9 +69,13 @@ pub async fn handle_command(args: Arguments) -> Result<()> {
     std::fs::create_dir_all(&local_data)
         .with_context(|| format!("Unable to create data directory: {:?}", local_data))?;
 
+    info!("Checking if provided metrics endpoints work...");
+
     // check if the provided endpoint works
-    for endpoint in args.metrics_endpoints {
-        check_endpoint(&endpoint).await?;
+    for endpoint in &args.metrics_endpoints {
+        if let Err(err) = check_endpoint(endpoint).await {
+            warn!("Failed to contact endpoint: {err:?}");
+        }
     }
 
     let mut handles = vec![];
@@ -263,7 +268,11 @@ fn to_scrape_config(metric_endpoint: &Url) -> prometheus::ScrapeConfig {
 
 /// Checks whenever the endpoint works
 async fn check_endpoint(url: &Url) -> Result<()> {
-    let response = reqwest::get(url).await?.error_for_status()?;
+    let response = CLIENT
+        .get(url.as_str())
+        .timeout(Duration::from_secs(5))
+        .send()
+        .await?;
 
     if !response.status().is_success() {
         bail!("Configure endpoint {url} did not return 2xx status code");
