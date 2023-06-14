@@ -9,15 +9,17 @@ use axum::Router;
 use clap::Parser;
 use directories::ProjectDirs;
 use flate2::read::GzDecoder;
+use futures_util::FutureExt;
 use http::{StatusCode, Uri};
 use include_dir::{include_dir, Dir};
-use indicatif::{ProgressBar, ProgressState, ProgressStyle};
+use indicatif::{MultiProgress, ProgressBar, ProgressState, ProgressStyle};
 use once_cell::sync::Lazy;
 use sha2::{Digest, Sha256};
 use std::fs::File;
 use std::io::{BufWriter, Seek, SeekFrom, Write};
 use std::net::SocketAddr;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 use std::vec;
 use tempfile::NamedTempFile;
@@ -30,6 +32,7 @@ use url::Url;
 static CLIENT: Lazy<reqwest::Client> = Lazy::new(|| {
     reqwest::Client::builder()
         .user_agent(concat!("am/", env!("CARGO_PKG_VERSION")))
+        .connect_timeout(Duration::from_secs(5))
         .build()
         .expect("Unable to create reqwest client")
 });
@@ -50,16 +53,19 @@ pub struct Arguments {
     #[clap(short, long, env, default_value = "127.0.0.1:6789")]
     listen_address: SocketAddr,
 
-    /// Startup the gateway as well.
-    // TODO: Actually implement that we use this
+    /// Startup the pushgateway as well.
     #[clap(short, long, env)]
-    enable_gateway: bool,
+    enable_pushgateway: bool,
+
+    /// The pushgateway version to use. Leave empty to use the latest version.
+    #[clap(long, env, default_value = "v1.6.0")]
+    pushgateway_version: String,
 }
 
-pub async fn handle_command(mut args: Arguments) -> Result<()> {
-    if args.metrics_endpoints.is_empty() && args.enable_gateway {
+pub async fn handle_command(mut args: Arguments, mp: MultiProgress) -> Result<()> {
+    if args.metrics_endpoints.is_empty() && args.enable_pushgateway {
         let endpoint = interactive::user_input("Endpoint")?;
-        args.metrics_endpoints.push(Url::parse(&endpoint)?);
+        args.metrics_endpoints.push(endpoint_parser(&endpoint)?);
     }
 
     // First let's retrieve the directory for our application to store data in.
@@ -80,20 +86,32 @@ pub async fn handle_command(mut args: Arguments) -> Result<()> {
         }
     }
 
+    if args.enable_pushgateway {
+        args.metrics_endpoints
+            .push(Url::parse("http://localhost:9091/pushgateway/metrics").unwrap());
+    }
+
     // Start Prometheus server
     let prometheus_args = args.clone();
     let prometheus_local_data = local_data.clone();
+    let prometheus_multi_progress = mp.clone();
     let prometheus_task = async move {
-        let prometheus_version = args.prometheus_version.trim_start_matches('v');
+        let prometheus_version = prometheus_args.prometheus_version.trim_start_matches('v');
 
         info!("Using Prometheus version: {}", prometheus_version);
 
         let prometheus_path =
-            prometheus_local_data.join(format!("prometheus-{}", prometheus_version));
+            prometheus_local_data.join(format!("prometheus-{prometheus_version}"));
 
+        // Check if prometheus is available
         if !prometheus_path.exists() {
-            info!("Downloading Prometheus");
-            install_prometheus(&prometheus_path, prometheus_version).await?;
+            info!("Cached version of Prometheus not found, downloading Prometheus");
+            install_prometheus(
+                &prometheus_path,
+                prometheus_version,
+                prometheus_multi_progress,
+            )
+            .await?;
             debug!("Downloaded Prometheus to: {:?}", &prometheus_path);
         } else {
             debug!("Found prometheus in: {}", prometheus_path.display());
@@ -103,22 +121,62 @@ pub async fn handle_command(mut args: Arguments) -> Result<()> {
         start_prometheus(&prometheus_path, &prometheus_config).await
     };
 
+    let pushgateway_task = if args.enable_pushgateway {
+        let pushgateway_args = args.clone();
+        let pushgateway_local_data = local_data.clone();
+        let pushgateway_multi_progress = mp.clone();
+        async move {
+            let pushgateway_version = pushgateway_args.pushgateway_version.trim_start_matches('v');
+
+            info!("Using pushgateway version: {}", pushgateway_version);
+
+            let pushgateway_path =
+                pushgateway_local_data.join(format!("pushgateway-{pushgateway_version}"));
+
+            // Check if pushgateway is available
+            if !pushgateway_path.exists() {
+                info!("Cached version of pushgateway not found, downloading pushgateway");
+                install_pushgateway(
+                    &pushgateway_path,
+                    pushgateway_version,
+                    pushgateway_multi_progress,
+                )
+                .await?;
+                info!("Downloaded to: {:?}", &pushgateway_path);
+            }
+
+            let pushgateway_config = generate_prom_config(pushgateway_args.metrics_endpoints)?;
+            start_pushgateway(&pushgateway_path, &pushgateway_config).await
+        }
+        .boxed()
+    } else {
+        async move { anyhow::Ok(()) }.boxed()
+    };
+
     // Start web server for hosting the explorer, am api and proxies to the enabled services.
     let listen_address = args.listen_address;
-    let web_server_task = async move { start_web_server(&listen_address).await };
+    let web_server_task = async move { start_web_server(&listen_address, args).await };
 
     select! {
         biased;
 
         _ = tokio::signal::ctrl_c() => {
-            bail!("CTRL-C invoked by user, exiting...");
+            debug!("sigint received by user, exiting...");
+            return Ok(())
         }
+
         Err(err) = prometheus_task => {
             bail!("Prometheus exited with an error: {err:?}");
         }
+
+        Err(err) = pushgateway_task => {
+            bail!("Pushgateway exited with an error: {err:?}");
+        }
+
         Err(err) = web_server_task => {
             bail!("Web server exited with an error: {err:?}");
         }
+
         else => {
             return Ok(());
         }
@@ -131,16 +189,25 @@ pub async fn handle_command(mut args: Arguments) -> Result<()> {
 /// archive into. Then it will verify the downloaded archive against the
 /// downloaded checksum. Finally it will unpack the archive into
 /// `prometheus_path`.
-async fn install_prometheus(prometheus_path: &PathBuf, prometheus_version: &str) -> Result<()> {
+async fn install_prometheus(
+    prometheus_path: &PathBuf,
+    prometheus_version: &str,
+    multi_progress: MultiProgress,
+) -> Result<()> {
     let (os, arch) = determine_os_and_arch()?;
     let package = format!("prometheus-{prometheus_version}.{os}-{arch}.tar.gz");
 
     let mut prometheus_archive = NamedTempFile::new()?;
 
-    let calculated_checksum =
-        download_prometheus(prometheus_archive.as_file(), prometheus_version, &package).await?;
+    let calculated_checksum = download_prometheus(
+        prometheus_archive.as_file(),
+        prometheus_version,
+        &package,
+        &multi_progress,
+    )
+    .await?;
 
-    verify_checksum(calculated_checksum, prometheus_version, &package).await?;
+    verify_checksum_prometheus(calculated_checksum, prometheus_version, &package).await?;
 
     // Make sure we set the position to the beginning of the file so that we can
     // unpack it.
@@ -150,6 +217,7 @@ async fn install_prometheus(prometheus_path: &PathBuf, prometheus_version: &str)
         prometheus_archive.as_file(),
         prometheus_path,
         prometheus_version,
+        &multi_progress,
     )
     .await
 }
@@ -160,6 +228,7 @@ async fn download_prometheus(
     destination: &File,
     prometheus_version: &str,
     package: &str,
+    multi_progress: &MultiProgress,
 ) -> Result<String> {
     let mut hasher = Sha256::new();
     let mut response = CLIENT
@@ -173,12 +242,13 @@ async fn download_prometheus(
         .ok_or_else(|| anyhow!("didn't receive content length"))?;
     let mut downloaded = 0;
 
-    let pb = ProgressBar::new(total_size);
+    let pb = multi_progress.add(ProgressBar::new(total_size));
 
     // https://github.com/console-rs/indicatif/blob/HEAD/examples/download.rs#L12
-    pb.set_style(ProgressStyle::with_template("{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {bytes}/{total_bytes} ({eta})")?
+    pb.set_style(ProgressStyle::with_template("{spinner:.green} [{elapsed_precise}] {msg} [{wide_bar:.cyan/blue}] {bytes}/{total_bytes} ({eta})")?
         .with_key("eta", |state: &ProgressState, w: &mut dyn std::fmt::Write| write!(w, "{:.1}s", state.eta().as_secs_f64()).unwrap())
         .progress_chars("=> "));
+    pb.set_message("Downloading Prometheus");
 
     let mut buffer = BufWriter::new(destination);
 
@@ -193,6 +263,7 @@ async fn download_prometheus(
     }
 
     pb.finish_and_clear();
+    multi_progress.remove(&pb);
 
     let checksum = hex::encode(hasher.finalize());
 
@@ -202,13 +273,15 @@ async fn download_prometheus(
 /// Verify the checksum of the downloaded Prometheus archive.
 ///
 /// This will retrieve the checksum file from the Prometheus GitHub release page.
-async fn verify_checksum(
+async fn verify_checksum_prometheus(
     calculated_checksum: String,
     prometheus_version: &str,
     package: &str,
 ) -> Result<()> {
     let checksums = CLIENT
-        .get(format!("https://github.com/prometheus/prometheus/releases/download/v{prometheus_version}/sha256sums.txt"))
+        .get(format!(
+            "https://github.com/prometheus/prometheus/releases/download/v{prometheus_version}/sha256sums.txt"
+        ))
         .send()
         .await?
         .error_for_status()?
@@ -243,6 +316,7 @@ async fn unpack_prometheus(
     archive: &File,
     prometheus_path: &PathBuf,
     prometheus_version: &str,
+    multi_progress: &MultiProgress,
 ) -> Result<()> {
     let (os, arch) = determine_os_and_arch()?;
 
@@ -252,10 +326,10 @@ async fn unpack_prometheus(
     // This prefix will be removed from the files in the archive.
     let prefix = format!("prometheus-{prometheus_version}.{os}-{arch}/");
 
-    let pb = ProgressBar::new_spinner();
+    let pb = multi_progress.add(ProgressBar::new_spinner());
     pb.set_style(ProgressStyle::default_spinner());
     pb.enable_steady_tick(Duration::from_millis(120));
-    pb.set_message("Unpacking...");
+    pb.set_message("Unpacking Prometheus...");
 
     for entry in ar.entries()? {
         let mut entry = entry?;
@@ -271,6 +345,175 @@ async fn unpack_prometheus(
     }
 
     pb.finish_and_clear();
+    multi_progress.remove(&pb);
+
+    Ok(())
+}
+
+/// Install the specified version of Pushgateway into `pushgateway_path`.
+///
+/// This function will first create a temporary file to download the Pushgateway
+/// archive into. Then it will verify the downloaded archive against the
+/// downloaded checksum. Finally it will unpack the archive into
+/// `pushgateway_path`.
+async fn install_pushgateway(
+    pushgateway_path: &PathBuf,
+    pushgateway_version: &str,
+    multi_progress: MultiProgress,
+) -> Result<()> {
+    let (os, arch) = determine_os_and_arch()?;
+    let package = format!("pushgateway-{pushgateway_version}.{os}-{arch}.tar.gz");
+
+    let mut pushgateway_archive = NamedTempFile::new()?;
+
+    let calculated_checksum = download_pushgateway(
+        pushgateway_archive.as_file(),
+        pushgateway_version,
+        &package,
+        &multi_progress,
+    )
+    .await?;
+
+    verify_checksum_pushgateway(calculated_checksum, pushgateway_version, &package).await?;
+
+    // Make sure we set the position to the beginning of the file so that we can
+    // unpack it.
+    pushgateway_archive.as_file_mut().seek(SeekFrom::Start(0))?;
+
+    unpack_pushgateway(
+        pushgateway_archive.as_file(),
+        pushgateway_path,
+        pushgateway_version,
+        &multi_progress,
+    )
+    .await
+}
+
+/// Download the specified version of Pushgateway into `destination`. It will
+/// also calculate the SHA256 checksum of the downloaded file.
+async fn download_pushgateway(
+    destination: &File,
+    pushgateway_version: &str,
+    package: &str,
+    multi_progress: &MultiProgress,
+) -> Result<String> {
+    let mut hasher = Sha256::new();
+    let mut response = CLIENT
+        .get(format!("https://github.com/prometheus/pushgateway/releases/download/v{pushgateway_version}/{package}"))
+        .send()
+        .await?
+        .error_for_status()?;
+
+    let total_size = response
+        .content_length()
+        .ok_or_else(|| anyhow!("didn't receive content length"))?;
+    let mut downloaded = 0;
+
+    let pb = multi_progress.add(ProgressBar::new(total_size));
+
+    // https://github.com/console-rs/indicatif/blob/HEAD/examples/download.rs#L12
+    pb.set_style(ProgressStyle::with_template("{spinner:.green} [{elapsed_precise}] {msg} [{wide_bar:.cyan/blue}] {bytes}/{total_bytes} ({eta})")?
+        .with_key("eta", |state: &ProgressState, w: &mut dyn std::fmt::Write| write!(w, "{:.1}s", state.eta().as_secs_f64()).unwrap())
+        .progress_chars("=> "));
+    pb.set_message("Downloading Pushgateway");
+
+    let mut buffer = BufWriter::new(destination);
+
+    while let Some(ref chunk) = response.chunk().await? {
+        buffer.write_all(chunk)?;
+        hasher.update(chunk);
+
+        let new_size = (downloaded + chunk.len() as u64).min(total_size);
+        downloaded = new_size;
+
+        pb.set_position(downloaded);
+    }
+
+    pb.finish_and_clear();
+    multi_progress.remove(&pb);
+
+    let checksum = hex::encode(hasher.finalize());
+
+    Ok(checksum)
+}
+
+/// Verify the checksum of the downloaded Prometheus archive.
+///
+/// This will retrieve the checksum file from the Prometheus GitHub release page.
+async fn verify_checksum_pushgateway(
+    calculated_checksum: String,
+    pushgateway_version: &str,
+    package: &str,
+) -> Result<()> {
+    let checksums = CLIENT
+        .get(format!(
+            "https://github.com/prometheus/pushgateway/releases/download/v{pushgateway_version}/sha256sums.txt"
+        ))
+        .send()
+        .await?
+        .error_for_status()?
+        .text()
+        .await?;
+
+    // Go through all the lines in the checksum file and look for the one that
+    // we need for our current service/version/os/arch.
+    let expected_checksum = checksums
+        .lines()
+        .find_map(|line| match line.split_once("  ") {
+            Some((checksum, filename)) if package == filename => Some(checksum),
+            _ => None,
+        })
+        .ok_or_else(|| anyhow!("unable to find checksum for {package} in checksum list"))?;
+
+    if expected_checksum != calculated_checksum {
+        error!(
+            ?expected_checksum,
+            ?calculated_checksum,
+            "Calculated checksum for downloaded archive did not match expected checksum",
+        );
+        bail!("checksum did not match");
+    }
+
+    Ok(())
+}
+
+/// Unpack the Pushgateway archive into the `pushgateway_path`. This will remove
+/// the prefix that is contained in the tar archive.
+async fn unpack_pushgateway(
+    archive: &File,
+    pushgateway_path: &PathBuf,
+    pushgateway_version: &str,
+    multi_progress: &MultiProgress,
+) -> Result<()> {
+    let (os, arch) = determine_os_and_arch()?;
+
+    let tar_file = GzDecoder::new(archive);
+    let mut ar = tar::Archive::new(tar_file);
+
+    // This prefix will be removed from the files in the archive.
+    let prefix = format!("pushgateway-{pushgateway_version}.{os}-{arch}/");
+
+    let pb = multi_progress.add(ProgressBar::new_spinner());
+    pb.set_style(ProgressStyle::default_spinner());
+    pb.enable_steady_tick(Duration::from_millis(120));
+    pb.set_message("Unpacking Pushgateway...");
+
+    for entry in ar.entries()? {
+        let mut entry = entry?;
+        let path = entry.path()?;
+
+        debug!("Unpacking {}", path.display());
+
+        // Remove the prefix and join it with the base directory.
+        let path = path.strip_prefix(&prefix)?.to_owned();
+        let path = pushgateway_path.join(path);
+
+        entry.unpack(&path)?;
+    }
+
+    pb.finish_and_clear();
+    multi_progress.remove(&pb);
+
     Ok(())
 }
 
@@ -342,8 +585,11 @@ fn to_scrape_config(metric_endpoint: &Url) -> prometheus::ScrapeConfig {
         None => metric_endpoint.host_str().unwrap().to_string(),
     };
 
+    static COUNTER: AtomicUsize = AtomicUsize::new(0);
+    let num = COUNTER.fetch_add(1, Ordering::SeqCst);
+
     prometheus::ScrapeConfig {
-        job_name: "app".to_string(),
+        job_name: format!("app_{num}"),
         static_configs: vec![prometheus::StaticScrapeConfig {
             targets: vec![host],
         }],
@@ -370,7 +616,7 @@ async fn check_endpoint(url: &Url) -> Result<()> {
 /// Start a prometheus process. This will block until the Prometheus process
 /// stops.
 async fn start_prometheus(
-    prometheus_binary_path: &PathBuf,
+    prometheus_path: &PathBuf,
     prometheus_config: &prometheus::Config,
 ) -> Result<()> {
     // First write the config to a temp file
@@ -395,7 +641,7 @@ async fn start_prometheus(
     #[cfg(target_os = "windows")]
     let program = "prometheus.exe";
 
-    let prometheus_path = prometheus_binary_path.join(program);
+    let prometheus_path = prometheus_path.join(program);
 
     debug!("Invoking prometheus at {}", prometheus_path.display());
 
@@ -416,11 +662,36 @@ async fn start_prometheus(
     Ok(())
 }
 
-async fn start_web_server(listen_address: &SocketAddr) -> Result<()> {
-    let app = Router::new()
+/// Start a prometheus process. This will block until the Prometheus process
+/// stops.
+async fn start_pushgateway(pushgateway_path: &PathBuf, _: &prometheus::Config) -> Result<()> {
+    info!("Starting Pushgateway");
+    let mut child = process::Command::new(pushgateway_path.join("pushgateway"))
+        .arg("--web.listen-address=:9091")
+        .arg("--web.external-url=http://localhost:6789/pushgateway") // TODO: Make sure this matches with that is actually running.
+        .spawn()
+        .context("Unable to start Pushgateway")?;
+
+    let status = child.wait().await?;
+    if !status.success() {
+        anyhow::bail!("Pushgateway exited with status {}", status)
+    }
+
+    Ok(())
+}
+
+async fn start_web_server(listen_address: &SocketAddr, args: Arguments) -> Result<()> {
+    let mut app = Router::new()
         // .route("/api/ ... ") // This can expose endpoints that the ui app can call
         .route("/explorer/*path", get(explorer_handler))
-        .route("/prometheus/*path", any(prometheus_handler));
+        .route("/prometheus/*path", any(prometheus_handler))
+        .route("/prometheus", any(prometheus_handler));
+
+    if args.enable_pushgateway {
+        app = app
+            .route("/pushgateway/*path", any(pushgateway_handler))
+            .route("/pushgateway", any(pushgateway_handler));
+    }
 
     let server = axum::Server::try_bind(listen_address)
         .with_context(|| format!("failed to bind to {}", listen_address))?
@@ -455,19 +726,23 @@ async fn explorer_handler(Path(path): Path<String>) -> impl IntoResponse {
     }
 }
 
-async fn prometheus_handler(mut req: http::Request<Body>) -> impl IntoResponse {
-    let path_query = req
-        .uri()
-        .path_and_query()
-        .map(|v| v.as_str())
-        .unwrap_or_else(|| req.uri().path());
+async fn prometheus_handler(req: http::Request<Body>) -> impl IntoResponse {
+    let upstream_base = Url::parse("http://localhost:9090").unwrap();
+    proxy_handler(req, upstream_base).await
+}
 
-    // TODO hardcoded for now
-    let uri = format!("http://127.0.0.1:9090{}", path_query);
+async fn pushgateway_handler(req: http::Request<Body>) -> impl IntoResponse {
+    let upstream_base = Url::parse("http://localhost:9091").unwrap();
+    proxy_handler(req, upstream_base).await
+}
 
-    trace!("Proxying request to {}", uri);
+async fn proxy_handler(mut req: http::Request<Body>, upstream_base: Url) -> impl IntoResponse {
+    trace!(req_uri=?req.uri(),method=?req.method(),"Proxying request");
 
-    *req.uri_mut() = Uri::try_from(uri).unwrap();
+    // NOTE: The username/password is not forwarded
+    let mut url = upstream_base.join(req.uri().path()).unwrap();
+    url.set_query(req.uri().query());
+    *req.uri_mut() = Uri::try_from(url.as_str()).unwrap();
 
     let res = CLIENT.execute(req.try_into().unwrap()).await;
 
