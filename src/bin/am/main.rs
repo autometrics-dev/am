@@ -2,7 +2,6 @@ use anyhow::{Context, Result};
 use clap::Parser;
 use commands::{handle_command, Application};
 use std::io;
-use tracing::metadata::LevelFilter;
 use tracing::{debug, error};
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;

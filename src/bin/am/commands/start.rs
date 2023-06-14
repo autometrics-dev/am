@@ -11,7 +11,7 @@ use flate2::read::GzDecoder;
 use futures_util::future::join_all;
 use http::{StatusCode, Uri};
 use include_dir::{include_dir, Dir};
-use indicatif::{ProgressBar, ProgressIterator, ProgressState, ProgressStyle};
+use indicatif::{ProgressBar, ProgressState, ProgressStyle};
 use once_cell::sync::Lazy;
 use std::fs::File;
 use std::io::{BufWriter, Write};
