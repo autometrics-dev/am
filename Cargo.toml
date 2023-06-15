@@ -16,6 +16,7 @@ categories = ["development-tools::profiling"]
 anyhow = { version = "1.0.71" }
 axum = { version = "0.6.18" }
 clap = { version = "4.2.7", features = ["derive", "env"] }
+dialoguer = "0.10.4"
 directories = { version = "5.0.1" }
 flate2 = { version = "1.0.26" }
 futures-util = { version = "0.3.28", features = ["io"] }

@@ -2,8 +2,7 @@ use anyhow::{Context, Result};
 use clap::Parser;
 use commands::{handle_command, Application};
 use std::io;
-use tracing::{debug, error};
-use tracing_subscriber::layer::filter::LevelFilter;
+use tracing::level_filters::LevelFilter;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{EnvFilter, Registry};
@@ -24,7 +23,7 @@ async fn main() -> Result<()> {
 
 /// Initialize logging for the application.
 ///
-/// Currently we have a straight forward logging setup that will log everything
+/// Currently, we have a straight forward logging setup that will log everything
 /// that is level info and higher to stderr. Users are able to influence this by
 /// exporting the `RUST_LOG` environment variable.
 ///
@@ -34,7 +33,7 @@ async fn main() -> Result<()> {
 fn init_logging() -> Result<()> {
     // The filter layer controls which log levels to display.
     let filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|| EnvFilter::default().add_directive(LevelFilter::INFO.into()));
+        .unwrap_or_else(|_| EnvFilter::default().add_directive(LevelFilter::INFO.into()));
 
     let log_layer = tracing_subscriber::fmt::layer().with_writer(io::stderr);
 

@@ -19,6 +19,8 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::time::Duration;
 use std::vec;
+use dialoguer::Input;
+use dialoguer::theme::SimpleTheme;
 use tokio::process;
 use tracing::{debug, error, info, trace, warn};
 use url::Url;
@@ -34,8 +36,8 @@ static CLIENT: Lazy<reqwest::Client> = Lazy::new(|| {
 
 #[derive(Parser, Clone)]
 pub struct Arguments {
-    #[clap(value_parser = endpoint_parser)]
     /// The endpoint(s) that Prometheus will scrape.
+    #[clap(value_parser = endpoint_parser)]
     metrics_endpoints: Vec<Url>,
 
     /// The Prometheus version to use.
@@ -54,9 +56,13 @@ pub struct Arguments {
     enable_gateway: bool,
 }
 
-pub async fn handle_command(args: Arguments) -> Result<()> {
+pub async fn handle_command(mut args: Arguments) -> Result<()> {
     if args.metrics_endpoints.is_empty() && args.enable_gateway {
-        warn!("No metrics endpoints specified and gateway is not enabled");
+        let endpoint: String = Input::with_theme(&SimpleTheme)
+            .with_prompt("Endpoint")
+            .interact()?;
+
+        args.metrics_endpoints.push(Url::parse(&endpoint)?);
     }
 
     // First let's retrieve the directory for our application to store data in.
