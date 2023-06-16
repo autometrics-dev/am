@@ -18,6 +18,7 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::time::Duration;
 use std::vec;
+use tempfile::NamedTempFile;
 use tokio::process;
 use tracing::{debug, error, info, trace, warn};
 use url::Url;
@@ -116,26 +117,32 @@ pub async fn handle_command(args: Arguments) -> Result<()> {
 async fn download_prometheus(prometheus_path: &PathBuf, prometheus_version: &str) -> Result<()> {
     let (os, arch) = determine_os_and_arch()?;
 
-    // TODO: Grab the checksum file and retrieve the checksum for the archive
-    let archive_path = {
-        let tmp_file = tempfile::NamedTempFile::new()?;
-        let mut res = CLIENT
+    let destination = NamedTempFile::new()?;
+
+    let mut response = CLIENT
             .get(format!("https://github.com/prometheus/prometheus/releases/download/v{prometheus_version}/prometheus-{prometheus_version}.{os}-{arch}.tar.gz"))
             .send()
             .await?
             .error_for_status()?;
 
-        let file = File::create(&tmp_file)?;
-        let mut buffer = BufWriter::new(file);
+    let file = File::create(&destination)?;
+    let mut buffer = BufWriter::new(file);
 
-        while let Some(ref chunk) = res.chunk().await? {
-            buffer.write_all(chunk)?;
-        }
+    while let Some(ref chunk) = response.chunk().await? {
+        buffer.write_all(chunk)?;
+    }
 
-        tmp_file
-    };
+    unpack_prometheus(&destination, prometheus_path, prometheus_version).await
+}
 
-    let file = File::open(archive_path)?;
+async fn unpack_prometheus(
+    archive: &NamedTempFile,
+    prometheus_path: &PathBuf,
+    prometheus_version: &str,
+) -> Result<()> {
+    let (os, arch) = determine_os_and_arch()?;
+
+    let file = File::open(archive)?;
     let tar_file = GzDecoder::new(file);
     let mut ar = tar::Archive::new(tar_file);
 
