@@ -1,4 +1,4 @@
-use anyhow::{bail, Context, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use autometrics_am::prometheus;
 use axum::body::{self, Body};
 use axum::extract::Path;
@@ -12,6 +12,7 @@ use futures_util::future::join_all;
 use http::{StatusCode, Uri};
 use include_dir::{include_dir, Dir};
 use once_cell::sync::Lazy;
+use sha2::{Digest, Sha256};
 use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::net::SocketAddr;
@@ -95,6 +96,8 @@ pub async fn handle_command(args: Arguments) -> Result<()> {
             info!("Downloading prometheus");
             download_prometheus(&prometheus_path, prometheus_version).await?;
             info!("Downloaded to: {:?}", &prometheus_path);
+        } else {
+            debug!("Found prometheus in {}", prometheus_path.display());
         }
 
         let prometheus_config = generate_prom_config(prometheus_args.metrics_endpoints)?;
@@ -116,11 +119,12 @@ pub async fn handle_command(args: Arguments) -> Result<()> {
 /// archive into `prometheus_path`.
 async fn download_prometheus(prometheus_path: &PathBuf, prometheus_version: &str) -> Result<()> {
     let (os, arch) = determine_os_and_arch()?;
+    let package = format!("prometheus-{prometheus_version}.{os}-{arch}.tar.gz");
 
-    let destination = NamedTempFile::new()?;
+    let mut destination = NamedTempFile::new()?;
 
     let mut response = CLIENT
-            .get(format!("https://github.com/prometheus/prometheus/releases/download/v{prometheus_version}/prometheus-{prometheus_version}.{os}-{arch}.tar.gz"))
+            .get(format!("https://github.com/prometheus/prometheus/releases/download/v{prometheus_version}/{package}"))
             .send()
             .await?
             .error_for_status()?;
@@ -132,7 +136,49 @@ async fn download_prometheus(prometheus_path: &PathBuf, prometheus_version: &str
         buffer.write_all(chunk)?;
     }
 
+    if !verify_checksum(&mut destination, prometheus_version, &package).await? {
+        // drop the temp file now so it gets cleaned up
+        drop(destination);
+        bail!("Checksum mismatched, you may be MITM'd right now. Aborting.");
+    }
+
     unpack_prometheus(&destination, prometheus_path, prometheus_version).await
+}
+
+async fn verify_checksum(
+    archive: &mut NamedTempFile,
+    prometheus_version: &str,
+    package: &str,
+) -> Result<bool> {
+    let checksums = CLIENT
+        .get(format!("https://github.com/prometheus/prometheus/releases/download/v{prometheus_version}/sha256sums.txt"))
+        .send()
+        .await?
+        .error_for_status()?
+        .text()
+        .await?;
+
+    let checksum_hex = checksums
+        .lines()
+        .flat_map(|line| line.split_once(' '))
+        .find(|(_, pkg)| package == *pkg)
+        .ok_or_else(|| anyhow!("unable to find checksum for {package} in checksum list"))?
+        .0;
+
+    let checksum = hex::decode(checksum_hex)?;
+
+    // https://stackoverflow.com/a/69790544/11494565
+    let mut hasher = Sha256::new();
+    std::io::copy(archive, &mut hasher)?;
+    let result = hasher.finalize();
+
+    debug!("Expecting checksum from prometheus: {checksum_hex}");
+    debug!(
+        "Calculated checksum for downloaded archive: {}",
+        hex::encode(result.as_slice())
+    );
+
+    Ok(result.as_slice() == checksum)
 }
 
 async fn unpack_prometheus(
