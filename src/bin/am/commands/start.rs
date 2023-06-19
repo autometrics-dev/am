@@ -1,4 +1,4 @@
-use anyhow::{bail, Context, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use autometrics_am::prometheus;
 use axum::body::{self, Body};
 use axum::extract::Path;
@@ -12,12 +12,15 @@ use futures_util::future::join_all;
 use http::{StatusCode, Uri};
 use include_dir::{include_dir, Dir};
 use once_cell::sync::Lazy;
+use sha2::digest::Output;
+use sha2::{Digest, Sha256};
 use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::time::Duration;
 use std::vec;
+use tempfile::NamedTempFile;
 use tokio::process;
 use tracing::{debug, error, info, trace, warn};
 use url::Url;
@@ -94,6 +97,8 @@ pub async fn handle_command(args: Arguments) -> Result<()> {
             info!("Downloading prometheus");
             download_prometheus(&prometheus_path, prometheus_version).await?;
             info!("Downloaded to: {:?}", &prometheus_path);
+        } else {
+            debug!("Found prometheus in {}", prometheus_path.display());
         }
 
         let prometheus_config = generate_prom_config(prometheus_args.metrics_endpoints)?;
@@ -115,27 +120,73 @@ pub async fn handle_command(args: Arguments) -> Result<()> {
 /// archive into `prometheus_path`.
 async fn download_prometheus(prometheus_path: &PathBuf, prometheus_version: &str) -> Result<()> {
     let (os, arch) = determine_os_and_arch()?;
+    let package = format!("prometheus-{prometheus_version}.{os}-{arch}.tar.gz");
 
-    // TODO: Grab the checksum file and retrieve the checksum for the archive
-    let archive_path = {
-        let tmp_file = tempfile::NamedTempFile::new()?;
-        let mut res = CLIENT
-            .get(format!("https://github.com/prometheus/prometheus/releases/download/v{prometheus_version}/prometheus-{prometheus_version}.{os}-{arch}.tar.gz"))
+    let destination = NamedTempFile::new()?;
+
+    let mut response = CLIENT
+            .get(format!("https://github.com/prometheus/prometheus/releases/download/v{prometheus_version}/{package}"))
             .send()
             .await?
             .error_for_status()?;
 
-        let file = File::create(&tmp_file)?;
-        let mut buffer = BufWriter::new(file);
+    let mut hasher = Sha256::new();
 
-        while let Some(ref chunk) = res.chunk().await? {
-            buffer.write_all(chunk)?;
-        }
+    let file = File::create(&destination)?;
+    let mut buffer = BufWriter::new(file);
 
-        tmp_file
-    };
+    while let Some(ref chunk) = response.chunk().await? {
+        buffer.write_all(chunk)?;
+        hasher.update(chunk);
+    }
 
-    let file = File::open(archive_path)?;
+    verify_checksum(hasher.finalize(), prometheus_version, &package).await?;
+    unpack_prometheus(&destination, prometheus_path, prometheus_version).await
+}
+
+async fn verify_checksum(
+    result: Output<Sha256>,
+    prometheus_version: &str,
+    package: &str,
+) -> Result<()> {
+    let checksums = CLIENT
+        .get(format!("https://github.com/prometheus/prometheus/releases/download/v{prometheus_version}/sha256sums.txt"))
+        .send()
+        .await?
+        .error_for_status()?
+        .text()
+        .await?;
+
+    let checksum_hex = checksums
+        .lines()
+        .flat_map(|line| line.split_once(' '))
+        .find(|(_, pkg)| package == *pkg)
+        .ok_or_else(|| anyhow!("unable to find checksum for {package} in checksum list"))?
+        .0;
+
+    let checksum = hex::decode(checksum_hex)?;
+
+    debug!("Expecting checksum from prometheus: {checksum_hex}");
+    debug!(
+        "Calculated checksum for downloaded archive: {}",
+        hex::encode(result.as_slice())
+    );
+
+    if result.as_slice() != checksum {
+        bail!("Checksum did not match");
+    }
+
+    Ok(())
+}
+
+async fn unpack_prometheus(
+    archive: &NamedTempFile,
+    prometheus_path: &PathBuf,
+    prometheus_version: &str,
+) -> Result<()> {
+    let (os, arch) = determine_os_and_arch()?;
+
+    let file = File::open(archive)?;
     let tar_file = GzDecoder::new(file);
     let mut ar = tar::Archive::new(tar_file);
 
