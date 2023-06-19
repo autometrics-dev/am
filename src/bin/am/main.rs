@@ -8,6 +8,7 @@ use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{EnvFilter, Registry};
 
 mod commands;
+mod interactive;
 
 #[tokio::main]
 async fn main() -> Result<()> {
