@@ -140,12 +140,7 @@ async fn download_prometheus(prometheus_path: &PathBuf, prometheus_version: &str
         hasher.update(chunk);
     }
 
-    if !verify_checksum(hasher.finalize(), prometheus_version, &package).await? {
-        // drop the temp file now so it gets cleaned up
-        drop(destination);
-        bail!("Checksum mismatched, you may be MITM'd right now. Aborting.");
-    }
-
+    verify_checksum(hasher.finalize(), prometheus_version, &package).await?;
     unpack_prometheus(&destination, prometheus_path, prometheus_version).await
 }
 
@@ -153,7 +148,7 @@ async fn verify_checksum(
     result: Output<Sha256>,
     prometheus_version: &str,
     package: &str,
-) -> Result<bool> {
+) -> Result<()> {
     let checksums = CLIENT
         .get(format!("https://github.com/prometheus/prometheus/releases/download/v{prometheus_version}/sha256sums.txt"))
         .send()
@@ -177,7 +172,11 @@ async fn verify_checksum(
         hex::encode(result.as_slice())
     );
 
-    Ok(result.as_slice() == checksum)
+    if result.as_slice() != checksum {
+        bail!("Failed to verify checksum");
+    }
+
+    Ok(())
 }
 
 async fn unpack_prometheus(
