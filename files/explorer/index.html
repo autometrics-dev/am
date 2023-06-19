@@ -13,12 +13,14 @@
     <textarea id="am-prometheus-url" style="display: none" role="hidden">
       /prometheus
     </textarea>
+    <script src="https://explorer.autometrics.dev/static/js/index.24432f8e.js"></script>
+
     <script>
       (function loadExplorerAssets() {
-        var AM_ASSETS_HOST = "https://quickmetrics-ui.pages.dev";
+        var AM_ASSETS_HOST = "https://explorer.autometrics.dev";
 
         document.head.append(createExplorerCssLink());
-        document.body.append(createExplorerJsScript());
+        // document.body.append(createExplorerJsScript());
 
         function createExplorerCssLink() {
           var link = document.createElement("link");
