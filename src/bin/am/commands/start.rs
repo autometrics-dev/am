@@ -12,6 +12,7 @@ use futures_util::future::join_all;
 use http::{StatusCode, Uri};
 use include_dir::{include_dir, Dir};
 use once_cell::sync::Lazy;
+use sha2::digest::Output;
 use sha2::{Digest, Sha256};
 use std::fs::File;
 use std::io::{BufWriter, Write};
@@ -121,7 +122,7 @@ async fn download_prometheus(prometheus_path: &PathBuf, prometheus_version: &str
     let (os, arch) = determine_os_and_arch()?;
     let package = format!("prometheus-{prometheus_version}.{os}-{arch}.tar.gz");
 
-    let mut destination = NamedTempFile::new()?;
+    let destination = NamedTempFile::new()?;
 
     let mut response = CLIENT
             .get(format!("https://github.com/prometheus/prometheus/releases/download/v{prometheus_version}/{package}"))
@@ -129,14 +130,17 @@ async fn download_prometheus(prometheus_path: &PathBuf, prometheus_version: &str
             .await?
             .error_for_status()?;
 
+    let mut hasher = Sha256::new();
+
     let file = File::create(&destination)?;
     let mut buffer = BufWriter::new(file);
 
     while let Some(ref chunk) = response.chunk().await? {
         buffer.write_all(chunk)?;
+        hasher.update(chunk);
     }
 
-    if !verify_checksum(&mut destination, prometheus_version, &package).await? {
+    if !verify_checksum(hasher.finalize(), prometheus_version, &package).await? {
         // drop the temp file now so it gets cleaned up
         drop(destination);
         bail!("Checksum mismatched, you may be MITM'd right now. Aborting.");
@@ -146,7 +150,7 @@ async fn download_prometheus(prometheus_path: &PathBuf, prometheus_version: &str
 }
 
 async fn verify_checksum(
-    archive: &mut NamedTempFile,
+    result: Output<Sha256>,
     prometheus_version: &str,
     package: &str,
 ) -> Result<bool> {
@@ -166,11 +170,6 @@ async fn verify_checksum(
         .0;
 
     let checksum = hex::decode(checksum_hex)?;
-
-    // https://stackoverflow.com/a/69790544/11494565
-    let mut hasher = Sha256::new();
-    std::io::copy(archive, &mut hasher)?;
-    let result = hasher.finalize();
 
     debug!("Expecting checksum from prometheus: {checksum_hex}");
     debug!(
