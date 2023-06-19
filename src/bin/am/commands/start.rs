@@ -1,3 +1,4 @@
+use crate::interactive;
 use anyhow::{anyhow, bail, Context, Result};
 use autometrics_am::prometheus;
 use axum::body::{self, Body};
@@ -11,6 +12,7 @@ use flate2::read::GzDecoder;
 use futures_util::future::join_all;
 use http::{StatusCode, Uri};
 use include_dir::{include_dir, Dir};
+use indicatif::{ProgressBar, ProgressState, ProgressStyle};
 use once_cell::sync::Lazy;
 use sha2::digest::Output;
 use sha2::{Digest, Sha256};
@@ -20,12 +22,10 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::time::Duration;
 use std::vec;
-use indicatif::{ProgressBar, ProgressState, ProgressStyle};
 use tempfile::NamedTempFile;
 use tokio::process;
 use tracing::{debug, error, info, trace, warn};
 use url::Url;
-use crate::interactive;
 
 // Create a reqwest client that will be used to make HTTP requests. This allows
 // for keep-alives if we are making multiple requests to the same host.
