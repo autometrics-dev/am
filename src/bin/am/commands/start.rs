@@ -173,7 +173,7 @@ async fn verify_checksum(
     );
 
     if result.as_slice() != checksum {
-        bail!("Failed to verify checksum");
+        bail!("Checksum did not match");
     }
 
     Ok(())
