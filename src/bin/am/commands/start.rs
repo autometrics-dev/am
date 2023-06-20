@@ -9,7 +9,6 @@ use axum::Router;
 use clap::Parser;
 use directories::ProjectDirs;
 use flate2::read::GzDecoder;
-use futures_util::future::join_all;
 use http::{StatusCode, Uri};
 use include_dir::{include_dir, Dir};
 use indicatif::{ProgressBar, ProgressState, ProgressStyle};
@@ -22,7 +21,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 use std::vec;
 use tempfile::NamedTempFile;
-use tokio::process;
+use tokio::{process, select};
 use tracing::{debug, error, info, trace, warn};
 use url::Url;
 
@@ -81,12 +80,10 @@ pub async fn handle_command(mut args: Arguments) -> Result<()> {
         }
     }
 
-    let mut handles = vec![];
-
     // Start Prometheus server
     let prometheus_args = args.clone();
     let prometheus_local_data = local_data.clone();
-    let prometheus_handle = tokio::spawn(async move {
+    let prometheus_task = async move {
         let prometheus_version = args.prometheus_version.trim_start_matches('v');
 
         info!("Using Prometheus version: {}", prometheus_version);
@@ -104,17 +101,28 @@ pub async fn handle_command(mut args: Arguments) -> Result<()> {
 
         let prometheus_config = generate_prom_config(prometheus_args.metrics_endpoints)?;
         start_prometheus(&prometheus_path, &prometheus_config).await
-    });
-    handles.push(prometheus_handle);
+    };
 
     // Start web server for hosting the explorer, am api and proxies to the enabled services.
     let listen_address = args.listen_address;
-    let web_server_handle = tokio::spawn(async move { start_web_server(&listen_address).await });
-    handles.push(web_server_handle);
+    let web_server_task = async move { start_web_server(&listen_address).await };
 
-    join_all(handles).await;
+    select! {
+        biased;
 
-    Ok(())
+        _ = tokio::signal::ctrl_c() => {
+            bail!("CTRL-C invoked by user, exiting...");
+        }
+        Err(err) = prometheus_task => {
+            bail!("Prometheus exited with an error: {err:?}");
+        }
+        Err(err) = web_server_task => {
+            bail!("Web server exited with an error: {err:?}");
+        }
+        else => {
+            return Ok(());
+        }
+    }
 }
 
 /// Install the specified version of Prometheus into `prometheus_path`.
@@ -366,13 +374,14 @@ async fn start_prometheus(
     prometheus_config: &prometheus::Config,
 ) -> Result<()> {
     // First write the config to a temp file
-
-    let config_file_path = PathBuf::from("/tmp/prometheus.yml");
+    let config_file_path = std::env::temp_dir().join("prometheus.yml");
     let config_file = File::create(&config_file_path)?;
+
     debug!(
         path = ?config_file_path,
         "Created temporary file for Prometheus config serialization"
     );
+
     serde_yaml::to_writer(&config_file, &prometheus_config)?;
 
     // TODO: Capture prometheus output into a internal buffer and expose it
@@ -380,7 +389,17 @@ async fn start_prometheus(
     // TODO: Change the working directory, maybe make it configurable?
 
     info!("Starting prometheus");
-    let mut child = process::Command::new(prometheus_binary_path.join("prometheus"))
+
+    #[cfg(not(target_os = "windows"))]
+    let program = "prometheus";
+    #[cfg(target_os = "windows")]
+    let program = "prometheus.exe";
+
+    let prometheus_path = prometheus_binary_path.join(program);
+
+    debug!("Invoking prometheus at {}", prometheus_path.display());
+
+    let mut child = process::Command::new(prometheus_path)
         .arg(format!("--config.file={}", config_file_path.display()))
         .arg("--web.listen-address=:9090")
         .arg("--web.enable-lifecycle")
@@ -389,8 +408,9 @@ async fn start_prometheus(
         .context("Unable to start Prometheus")?;
 
     let status = child.wait().await?;
+
     if !status.success() {
-        anyhow::bail!("Prometheus exited with status {}", status)
+        bail!("Prometheus exited with status {}", status)
     }
 
     Ok(())
