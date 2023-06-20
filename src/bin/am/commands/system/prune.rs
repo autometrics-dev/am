@@ -1,4 +1,5 @@
-use anyhow::{Context, Result};
+use crate::interactive;
+use anyhow::{bail, Context, Result};
 use clap::Parser;
 use directories::ProjectDirs;
 use std::io;
@@ -15,8 +16,8 @@ pub struct Arguments {
 pub async fn handle_command(args: Arguments) -> Result<()> {
     // If the users hasn't specified the `force` argument, then ask the user if
     // they want to continue.
-    if !args.force && !ask_continue_prune().await {
-        anyhow::bail!("Pruning cancelled")
+    if !args.force && !interactive::confirm("Prune all am program files?")? {
+        bail!("Pruning cancelled");
     }
 
     // Get local directory
@@ -38,11 +39,4 @@ pub async fn handle_command(args: Arguments) -> Result<()> {
 
     info!("Pruning complete");
     Ok(())
-}
-
-/// Ask the user if they want to continue pruning through the terminal. Returns
-/// `true` if the user wants to continue, `false` otherwise.
-async fn ask_continue_prune() -> bool {
-    // TODO: Make configurable
-    false
 }

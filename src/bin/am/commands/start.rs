@@ -1,3 +1,4 @@
+use crate::interactive;
 use anyhow::{anyhow, bail, Context, Result};
 use autometrics_am::prometheus;
 use axum::body::{self, Body};
@@ -11,6 +12,7 @@ use flate2::read::GzDecoder;
 use futures_util::future::join_all;
 use http::{StatusCode, Uri};
 use include_dir::{include_dir, Dir};
+use indicatif::{ProgressBar, ProgressState, ProgressStyle};
 use once_cell::sync::Lazy;
 use sha2::{Digest, Sha256};
 use std::fs::File;
@@ -35,8 +37,8 @@ static CLIENT: Lazy<reqwest::Client> = Lazy::new(|| {
 
 #[derive(Parser, Clone)]
 pub struct Arguments {
-    #[clap(value_parser = endpoint_parser)]
     /// The endpoint(s) that Prometheus will scrape.
+    #[clap(value_parser = endpoint_parser)]
     metrics_endpoints: Vec<Url>,
 
     /// The Prometheus version to use.
@@ -55,9 +57,10 @@ pub struct Arguments {
     enable_gateway: bool,
 }
 
-pub async fn handle_command(args: Arguments) -> Result<()> {
+pub async fn handle_command(mut args: Arguments) -> Result<()> {
     if args.metrics_endpoints.is_empty() && args.enable_gateway {
-        warn!("No metrics endpoints specified and gateway is not enabled");
+        let endpoint = interactive::user_input("Endpoint")?;
+        args.metrics_endpoints.push(Url::parse(&endpoint)?);
     }
 
     // First let's retrieve the directory for our application to store data in.
@@ -157,12 +160,31 @@ async fn download_prometheus(
         .await?
         .error_for_status()?;
 
+    let total_size = response
+        .content_length()
+        .ok_or_else(|| anyhow!("didn't receive content length"))?;
+    let mut downloaded = 0;
+
+    let pb = ProgressBar::new(total_size);
+
+    // https://github.com/console-rs/indicatif/blob/HEAD/examples/download.rs#L12
+    pb.set_style(ProgressStyle::with_template("{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {bytes}/{total_bytes} ({eta})")?
+        .with_key("eta", |state: &ProgressState, w: &mut dyn std::fmt::Write| write!(w, "{:.1}s", state.eta().as_secs_f64()).unwrap())
+        .progress_chars("=> "));
+
     let mut buffer = BufWriter::new(destination);
 
     while let Some(ref chunk) = response.chunk().await? {
         buffer.write_all(chunk)?;
         hasher.update(chunk);
+
+        let new_size = (downloaded + chunk.len() as u64).min(total_size);
+        downloaded = new_size;
+
+        pb.set_position(downloaded);
     }
+
+    pb.finish_and_clear();
 
     let checksum = hex::encode(hasher.finalize());
 
@@ -222,16 +244,25 @@ async fn unpack_prometheus(
     // This prefix will be removed from the files in the archive.
     let prefix = format!("prometheus-{prometheus_version}.{os}-{arch}/");
 
+    let pb = ProgressBar::new_spinner();
+    pb.set_style(ProgressStyle::default_spinner());
+    pb.enable_steady_tick(Duration::from_millis(120));
+    pb.set_message("Unpacking...");
+
     for entry in ar.entries()? {
         let mut entry = entry?;
+        let path = entry.path()?;
+
+        debug!("Unpacking {}", path.display());
 
         // Remove the prefix and join it with the base directory.
-        let path = entry.path()?.strip_prefix(&prefix)?.to_owned();
+        let path = path.strip_prefix(&prefix)?.to_owned();
         let path = prometheus_path.join(path);
 
         entry.unpack(&path)?;
     }
 
+    pb.finish_and_clear();
     Ok(())
 }
 

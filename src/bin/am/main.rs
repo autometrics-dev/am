@@ -2,16 +2,16 @@ use anyhow::{Context, Result};
 use clap::Parser;
 use commands::{handle_command, Application};
 use std::io;
-use tracing::metadata::LevelFilter;
-use tracing::{debug, error};
+use tracing::level_filters::LevelFilter;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{EnvFilter, Registry};
 
 mod commands;
+mod interactive;
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<()> {
     let app = Application::parse();
 
     if let Err(err) = init_logging() {
@@ -19,20 +19,12 @@ async fn main() {
         std::process::exit(1);
     }
 
-    let result = handle_command(app).await;
-
-    match result {
-        Ok(_) => debug!("Command completed successfully"),
-        Err(err) => {
-            error!("Command failed: {:?}", err);
-            std::process::exit(1);
-        }
-    }
+    handle_command(app).await
 }
 
 /// Initialize logging for the application.
 ///
-/// Currently we have a straight forward logging setup that will log everything
+/// Currently, we have a straight forward logging setup that will log everything
 /// that is level info and higher to stderr. Users are able to influence this by
 /// exporting the `RUST_LOG` environment variable.
 ///
@@ -41,12 +33,13 @@ async fn main() {
 /// within the `am` module, but will only show info for other modules.
 fn init_logging() -> Result<()> {
     // The filter layer controls which log levels to display.
-    let filter_layer = EnvFilter::from_default_env().add_directive(LevelFilter::INFO.into());
+    let filter = EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| EnvFilter::default().add_directive(LevelFilter::INFO.into()));
 
     let log_layer = tracing_subscriber::fmt::layer().with_writer(io::stderr);
 
     Registry::default()
-        .with(filter_layer)
+        .with(filter)
         .with(log_layer)
         .try_init()
         .context("unable to initialize logger")?;
