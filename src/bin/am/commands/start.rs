@@ -253,7 +253,6 @@ async fn unpack_prometheus(
         let mut entry = entry?;
         let path = entry.path()?;
 
-        pb.set_message(format!("Unpacking {}", path.display()));
         debug!("Unpacking {}", path.display());
 
         // Remove the prefix and join it with the base directory.
