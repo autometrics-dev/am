@@ -14,10 +14,9 @@ use http::{StatusCode, Uri};
 use include_dir::{include_dir, Dir};
 use indicatif::{ProgressBar, ProgressState, ProgressStyle};
 use once_cell::sync::Lazy;
-use sha2::digest::Output;
 use sha2::{Digest, Sha256};
 use std::fs::File;
-use std::io::{BufWriter, Write};
+use std::io::{BufWriter, Seek, SeekFrom, Write};
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::time::Duration;
@@ -95,13 +94,12 @@ pub async fn handle_command(mut args: Arguments) -> Result<()> {
         let prometheus_path =
             prometheus_local_data.join(format!("prometheus-{}", prometheus_version));
 
-        // Check if prom is available at "some" location
         if !prometheus_path.exists() {
-            info!("Downloading prometheus");
-            download_prometheus(&prometheus_path, prometheus_version).await?;
-            info!("Downloaded to: {:?}", &prometheus_path);
+            info!("Downloading Prometheus");
+            install_prometheus(&prometheus_path, prometheus_version).await?;
+            debug!("Downloaded Prometheus to: {:?}", &prometheus_path);
         } else {
-            debug!("Found prometheus in {}", prometheus_path.display());
+            debug!("Found prometheus in: {}", prometheus_path.display());
         }
 
         let prometheus_config = generate_prom_config(prometheus_args.metrics_endpoints)?;
@@ -119,19 +117,48 @@ pub async fn handle_command(mut args: Arguments) -> Result<()> {
     Ok(())
 }
 
-/// Download the specified Prometheus version from GitHub and extract the
-/// archive into `prometheus_path`.
-async fn download_prometheus(prometheus_path: &PathBuf, prometheus_version: &str) -> Result<()> {
+/// Install the specified version of Prometheus into `prometheus_path`.
+///
+/// This function will first create a temporary file to download the Prometheus
+/// archive into. Then it will verify the downloaded archive against the
+/// downloaded checksum. Finally it will unpack the archive into
+/// `prometheus_path`.
+async fn install_prometheus(prometheus_path: &PathBuf, prometheus_version: &str) -> Result<()> {
     let (os, arch) = determine_os_and_arch()?;
     let package = format!("prometheus-{prometheus_version}.{os}-{arch}.tar.gz");
 
-    let destination = NamedTempFile::new()?;
+    let mut prometheus_archive = NamedTempFile::new()?;
 
+    let calculated_checksum =
+        download_prometheus(prometheus_archive.as_file(), prometheus_version, &package).await?;
+
+    verify_checksum(calculated_checksum, prometheus_version, &package).await?;
+
+    // Make sure we set the position to the beginning of the file so that we can
+    // unpack it.
+    prometheus_archive.as_file_mut().seek(SeekFrom::Start(0))?;
+
+    unpack_prometheus(
+        prometheus_archive.as_file(),
+        prometheus_path,
+        prometheus_version,
+    )
+    .await
+}
+
+/// Download the specified version of Prometheus into `destination`. It will
+/// also calculate the SHA256 checksum of the downloaded file.
+async fn download_prometheus(
+    destination: &File,
+    prometheus_version: &str,
+    package: &str,
+) -> Result<String> {
+    let mut hasher = Sha256::new();
     let mut response = CLIENT
-            .get(format!("https://github.com/prometheus/prometheus/releases/download/v{prometheus_version}/{package}"))
-            .send()
-            .await?
-            .error_for_status()?;
+        .get(format!("https://github.com/prometheus/prometheus/releases/download/v{prometheus_version}/{package}"))
+        .send()
+        .await?
+        .error_for_status()?;
 
     let total_size = response
         .content_length()
@@ -145,10 +172,7 @@ async fn download_prometheus(prometheus_path: &PathBuf, prometheus_version: &str
         .with_key("eta", |state: &ProgressState, w: &mut dyn std::fmt::Write| write!(w, "{:.1}s", state.eta().as_secs_f64()).unwrap())
         .progress_chars("=> "));
 
-    let mut hasher = Sha256::new();
-
-    let file = File::create(&destination)?;
-    let mut buffer = BufWriter::new(file);
+    let mut buffer = BufWriter::new(destination);
 
     while let Some(ref chunk) = response.chunk().await? {
         buffer.write_all(chunk)?;
@@ -162,15 +186,16 @@ async fn download_prometheus(prometheus_path: &PathBuf, prometheus_version: &str
 
     pb.finish_and_clear();
 
-    verify_checksum(hasher.finalize(), prometheus_version, &package).await?;
+    let checksum = hex::encode(hasher.finalize());
 
-    info!("Successfully downloaded Prometheus");
-
-    unpack_prometheus(&destination, prometheus_path, prometheus_version).await
+    Ok(checksum)
 }
 
+/// Verify the checksum of the downloaded Prometheus archive.
+///
+/// This will retrieve the checksum file from the Prometheus GitHub release page.
 async fn verify_checksum(
-    result: Output<Sha256>,
+    calculated_checksum: String,
     prometheus_version: &str,
     package: &str,
 ) -> Result<()> {
@@ -182,37 +207,38 @@ async fn verify_checksum(
         .text()
         .await?;
 
-    let checksum_hex = checksums
+    // Go through all the lines in the checksum file and look for the one that
+    // we need for our current service/version/os/arch.
+    let expected_checksum = checksums
         .lines()
-        .flat_map(|line| line.split_once(' '))
-        .find(|(_, pkg)| package == *pkg)
-        .ok_or_else(|| anyhow!("unable to find checksum for {package} in checksum list"))?
-        .0;
+        .find_map(|line| match line.split_once("  ") {
+            Some((checksum, filename)) if package == filename => Some(checksum),
+            _ => None,
+        })
+        .ok_or_else(|| anyhow!("unable to find checksum for {package} in checksum list"))?;
 
-    let checksum = hex::decode(checksum_hex)?;
-
-    debug!("Expecting checksum from prometheus: {checksum_hex}");
-    debug!(
-        "Calculated checksum for downloaded archive: {}",
-        hex::encode(result.as_slice())
-    );
-
-    if result.as_slice() != checksum {
-        bail!("Checksum did not match");
+    if expected_checksum != calculated_checksum {
+        error!(
+            ?expected_checksum,
+            ?calculated_checksum,
+            "Calculated checksum for downloaded archive did not match expected checksum",
+        );
+        bail!("checksum did not match");
     }
 
     Ok(())
 }
 
+/// Unpack the Prometheus archive into the `prometheus_path`. This will remove
+/// the prefix that is contained in the tar archive.
 async fn unpack_prometheus(
-    archive: &NamedTempFile,
+    archive: &File,
     prometheus_path: &PathBuf,
     prometheus_version: &str,
 ) -> Result<()> {
     let (os, arch) = determine_os_and_arch()?;
 
-    let file = File::open(archive)?;
-    let tar_file = GzDecoder::new(file);
+    let tar_file = GzDecoder::new(archive);
     let mut ar = tar::Archive::new(tar_file);
 
     // This prefix will be removed from the files in the archive.
