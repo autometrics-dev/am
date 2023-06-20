@@ -1,9 +1,19 @@
 <!DOCTYPE html>
 <html lang="en">
   <head>
-    <!-- TODO: Add favicon -->
+    <!-- TODO: Upload favicon -->
+    <!-- <link
+      rel="icon"
+      type="image/x-icon"
+      href="https://explorer.autometrics.dev/favicon.ico"
+    /> -->
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link
+      id="autometrics-explorer-css"
+      rel="stylesheet"
+      href="https://explorer.autometrics.dev/static/css/index.3527160e.css"
+    />
     <title>Autometrics Explorer</title>
   </head>
   <body>
@@ -13,37 +23,10 @@
     <textarea id="am-prometheus-url" style="display: none" role="hidden">
       /prometheus
     </textarea>
-    <script>
-      (function loadExplorerAssets() {
-        var AM_ASSETS_HOST = "https://quickmetrics-ui.pages.dev";
-
-        document.head.append(createExplorerCssLink());
-        document.body.append(createExplorerJsScript());
-
-        function createExplorerCssLink() {
-          var link = document.createElement("link");
-          link.id = "autometrics-explorer-css";
-          link.rel = "stylesheet";
-          link.href =
-            AM_ASSETS_HOST +
-            "/static/css/index.3527160e.css" +
-            "?cachebuster=" +
-            Date.now();
-          return link;
-        }
-
-        function createExplorerJsScript() {
-          var script = document.createElement("script");
-          script.type = "module";
-          script.src =
-            AM_ASSETS_HOST +
-            "/static/js/index.24432f8e.js" +
-            "?cachebuster=" +
-            Date.now();
-          script.id = "autometrics-explorer-js";
-          return script;
-        }
-      })();
-    </script>
+    <script
+      src="https://explorer.autometrics.dev/static/js/index.24432f8e.js"
+      type="module"
+      id="autometrics-explorer-js"
+    ></script>
   </body>
 </html>
