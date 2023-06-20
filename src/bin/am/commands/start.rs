@@ -8,7 +8,6 @@ use axum::Router;
 use clap::Parser;
 use directories::ProjectDirs;
 use flate2::read::GzDecoder;
-use futures_util::future::join_all;
 use http::{StatusCode, Uri};
 use include_dir::{include_dir, Dir};
 use once_cell::sync::Lazy;
@@ -20,7 +19,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 use std::vec;
 use tempfile::NamedTempFile;
-use tokio::process;
+use tokio::{process, select};
 use tracing::{debug, error, info, trace, warn};
 use url::Url;
 
@@ -78,12 +77,10 @@ pub async fn handle_command(args: Arguments) -> Result<()> {
         }
     }
 
-    let mut handles = vec![];
-
     // Start Prometheus server
     let prometheus_args = args.clone();
     let prometheus_local_data = local_data.clone();
-    let prometheus_handle = tokio::spawn(async move {
+    let prometheus_task = async move {
         let prometheus_version = args.prometheus_version.trim_start_matches('v');
 
         info!("Using Prometheus version: {}", prometheus_version);
@@ -101,17 +98,28 @@ pub async fn handle_command(args: Arguments) -> Result<()> {
 
         let prometheus_config = generate_prom_config(prometheus_args.metrics_endpoints)?;
         start_prometheus(&prometheus_path, &prometheus_config).await
-    });
-    handles.push(prometheus_handle);
+    };
 
     // Start web server for hosting the explorer, am api and proxies to the enabled services.
     let listen_address = args.listen_address;
-    let web_server_handle = tokio::spawn(async move { start_web_server(&listen_address).await });
-    handles.push(web_server_handle);
+    let web_server_task = async move { start_web_server(&listen_address).await };
 
-    join_all(handles).await;
+    select! {
+        biased;
 
-    Ok(())
+        _ = tokio::signal::ctrl_c() => {
+            bail!("CTRL-C invoked by user, exiting...");
+        }
+        Err(err) = prometheus_task => {
+            bail!("Prometheus exited with an error: {err:?}");
+        }
+        Err(err) = web_server_task => {
+            bail!("Web server exited with an error: {err:?}");
+        }
+        else => {
+            return Ok(());
+        }
+    }
 }
 
 /// Install the specified version of Prometheus into `prometheus_path`.
