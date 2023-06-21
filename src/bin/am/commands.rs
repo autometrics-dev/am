@@ -19,11 +19,18 @@ pub enum SubCommands {
 
     /// Manage am related system settings.
     System(system::Arguments),
+
+    #[clap(hide = true)]
+    MarkdownHelp,
 }
 
 pub async fn handle_command(app: Application) -> Result<()> {
     match app.command {
         SubCommands::Start(args) => start::handle_command(args).await,
         SubCommands::System(args) => system::handle_command(args).await,
+        SubCommands::MarkdownHelp => {
+            clap_markdown::print_help_markdown::<Application>();
+            Ok(())
+        }
     }
 }
