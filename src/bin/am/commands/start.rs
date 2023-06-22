@@ -428,6 +428,9 @@ async fn start_web_server(listen_address: &SocketAddr) -> Result<()> {
 
     debug!("Web server listening on {}", server.local_addr());
 
+    info!("Explorer endpoint: http://{}", server.local_addr());
+    info!("Prometheus endpoint: http://127.0.0.1:9090");
+
     // TODO: Add support for graceful shutdown
     // server.with_graceful_shutdown(shutdown_signal()).await?;
     server.await?;
