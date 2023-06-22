@@ -1,3 +1,4 @@
+use crate::downloader::download_github_release;
 use crate::interactive;
 use anyhow::{anyhow, bail, Context, Result};
 use autometrics_am::prometheus;
@@ -12,11 +13,10 @@ use flate2::read::GzDecoder;
 use futures_util::FutureExt;
 use http::{StatusCode, Uri};
 use include_dir::{include_dir, Dir};
-use indicatif::{MultiProgress, ProgressBar, ProgressState, ProgressStyle};
+use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use once_cell::sync::Lazy;
-use sha2::{Digest, Sha256};
 use std::fs::File;
-use std::io::{BufWriter, Seek, SeekFrom, Write};
+use std::io::{Seek, SeekFrom};
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -29,7 +29,7 @@ use url::Url;
 
 // Create a reqwest client that will be used to make HTTP requests. This allows
 // for keep-alives if we are making multiple requests to the same host.
-static CLIENT: Lazy<reqwest::Client> = Lazy::new(|| {
+pub static CLIENT: Lazy<reqwest::Client> = Lazy::new(|| {
     reqwest::Client::builder()
         .user_agent(concat!("am/", env!("CARGO_PKG_VERSION")))
         .connect_timeout(Duration::from_secs(5))
@@ -199,8 +199,10 @@ async fn install_prometheus(
 
     let mut prometheus_archive = NamedTempFile::new()?;
 
-    let calculated_checksum = download_prometheus(
+    let calculated_checksum = download_github_release(
         prometheus_archive.as_file(),
+        "prometheus",
+        "prometheus",
         prometheus_version,
         &package,
         &multi_progress,
@@ -220,54 +222,6 @@ async fn install_prometheus(
         &multi_progress,
     )
     .await
-}
-
-/// Download the specified version of Prometheus into `destination`. It will
-/// also calculate the SHA256 checksum of the downloaded file.
-async fn download_prometheus(
-    destination: &File,
-    prometheus_version: &str,
-    package: &str,
-    multi_progress: &MultiProgress,
-) -> Result<String> {
-    let mut hasher = Sha256::new();
-    let mut response = CLIENT
-        .get(format!("https://github.com/prometheus/prometheus/releases/download/v{prometheus_version}/{package}"))
-        .send()
-        .await?
-        .error_for_status()?;
-
-    let total_size = response
-        .content_length()
-        .ok_or_else(|| anyhow!("didn't receive content length"))?;
-    let mut downloaded = 0;
-
-    let pb = multi_progress.add(ProgressBar::new(total_size));
-
-    // https://github.com/console-rs/indicatif/blob/HEAD/examples/download.rs#L12
-    pb.set_style(ProgressStyle::with_template("{spinner:.green} [{elapsed_precise}] {msg} [{wide_bar:.cyan/blue}] {bytes}/{total_bytes} ({eta})")?
-        .with_key("eta", |state: &ProgressState, w: &mut dyn std::fmt::Write| write!(w, "{:.1}s", state.eta().as_secs_f64()).unwrap())
-        .progress_chars("=> "));
-    pb.set_message("Downloading Prometheus");
-
-    let mut buffer = BufWriter::new(destination);
-
-    while let Some(ref chunk) = response.chunk().await? {
-        buffer.write_all(chunk)?;
-        hasher.update(chunk);
-
-        let new_size = (downloaded + chunk.len() as u64).min(total_size);
-        downloaded = new_size;
-
-        pb.set_position(downloaded);
-    }
-
-    pb.finish_and_clear();
-    multi_progress.remove(&pb);
-
-    let checksum = hex::encode(hasher.finalize());
-
-    Ok(checksum)
 }
 
 /// Verify the checksum of the downloaded Prometheus archive.
@@ -366,8 +320,10 @@ async fn install_pushgateway(
 
     let mut pushgateway_archive = NamedTempFile::new()?;
 
-    let calculated_checksum = download_pushgateway(
+    let calculated_checksum = download_github_release(
         pushgateway_archive.as_file(),
+        "prometheus",
+        "pushgateway",
         pushgateway_version,
         &package,
         &multi_progress,
@@ -387,54 +343,6 @@ async fn install_pushgateway(
         &multi_progress,
     )
     .await
-}
-
-/// Download the specified version of Pushgateway into `destination`. It will
-/// also calculate the SHA256 checksum of the downloaded file.
-async fn download_pushgateway(
-    destination: &File,
-    pushgateway_version: &str,
-    package: &str,
-    multi_progress: &MultiProgress,
-) -> Result<String> {
-    let mut hasher = Sha256::new();
-    let mut response = CLIENT
-        .get(format!("https://github.com/prometheus/pushgateway/releases/download/v{pushgateway_version}/{package}"))
-        .send()
-        .await?
-        .error_for_status()?;
-
-    let total_size = response
-        .content_length()
-        .ok_or_else(|| anyhow!("didn't receive content length"))?;
-    let mut downloaded = 0;
-
-    let pb = multi_progress.add(ProgressBar::new(total_size));
-
-    // https://github.com/console-rs/indicatif/blob/HEAD/examples/download.rs#L12
-    pb.set_style(ProgressStyle::with_template("{spinner:.green} [{elapsed_precise}] {msg} [{wide_bar:.cyan/blue}] {bytes}/{total_bytes} ({eta})")?
-        .with_key("eta", |state: &ProgressState, w: &mut dyn std::fmt::Write| write!(w, "{:.1}s", state.eta().as_secs_f64()).unwrap())
-        .progress_chars("=> "));
-    pb.set_message("Downloading Pushgateway");
-
-    let mut buffer = BufWriter::new(destination);
-
-    while let Some(ref chunk) = response.chunk().await? {
-        buffer.write_all(chunk)?;
-        hasher.update(chunk);
-
-        let new_size = (downloaded + chunk.len() as u64).min(total_size);
-        downloaded = new_size;
-
-        pb.set_position(downloaded);
-    }
-
-    pb.finish_and_clear();
-    multi_progress.remove(&pb);
-
-    let checksum = hex::encode(hasher.finalize());
-
-    Ok(checksum)
 }
 
 /// Verify the checksum of the downloaded Prometheus archive.

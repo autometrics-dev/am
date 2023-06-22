@@ -9,6 +9,7 @@ use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{EnvFilter, Registry};
 
 mod commands;
+mod downloader;
 mod interactive;
 
 #[tokio::main]
