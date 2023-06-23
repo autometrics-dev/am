@@ -1,4 +1,4 @@
-use crate::downloader::{download_github_release, verify_checksum};
+use crate::downloader::{download_github_release, unpack, verify_checksum};
 use crate::interactive;
 use anyhow::{bail, Context, Result};
 use autometrics_am::prometheus;
@@ -9,11 +9,10 @@ use axum::routing::{any, get};
 use axum::Router;
 use clap::Parser;
 use directories::ProjectDirs;
-use flate2::read::GzDecoder;
 use futures_util::FutureExt;
 use http::{StatusCode, Uri};
 use include_dir::{include_dir, Dir};
-use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
+use indicatif::MultiProgress;
 use once_cell::sync::Lazy;
 use std::fs::File;
 use std::io::{Seek, SeekFrom};
@@ -195,7 +194,9 @@ async fn install_prometheus(
     multi_progress: MultiProgress,
 ) -> Result<()> {
     let (os, arch) = determine_os_and_arch()?;
-    let package = format!("prometheus-{prometheus_version}.{os}-{arch}.tar.gz");
+    let base = format!("prometheus-{prometheus_version}.{os}-{arch}");
+    let package = format!("{base}.tar.gz");
+    let prefix = format!("{base}/");
 
     let mut prometheus_archive = NamedTempFile::new()?;
 
@@ -222,53 +223,14 @@ async fn install_prometheus(
     // unpack it.
     prometheus_archive.as_file_mut().seek(SeekFrom::Start(0))?;
 
-    unpack_prometheus(
+    unpack(
         prometheus_archive.as_file(),
+        "prometheus",
         prometheus_path,
-        prometheus_version,
+        &prefix,
         &multi_progress,
     )
     .await
-}
-
-/// Unpack the Prometheus archive into the `prometheus_path`. This will remove
-/// the prefix that is contained in the tar archive.
-async fn unpack_prometheus(
-    archive: &File,
-    prometheus_path: &PathBuf,
-    prometheus_version: &str,
-    multi_progress: &MultiProgress,
-) -> Result<()> {
-    let (os, arch) = determine_os_and_arch()?;
-
-    let tar_file = GzDecoder::new(archive);
-    let mut ar = tar::Archive::new(tar_file);
-
-    // This prefix will be removed from the files in the archive.
-    let prefix = format!("prometheus-{prometheus_version}.{os}-{arch}/");
-
-    let pb = multi_progress.add(ProgressBar::new_spinner());
-    pb.set_style(ProgressStyle::default_spinner());
-    pb.enable_steady_tick(Duration::from_millis(120));
-    pb.set_message("Unpacking Prometheus...");
-
-    for entry in ar.entries()? {
-        let mut entry = entry?;
-        let path = entry.path()?;
-
-        debug!("Unpacking {}", path.display());
-
-        // Remove the prefix and join it with the base directory.
-        let path = path.strip_prefix(&prefix)?.to_owned();
-        let path = prometheus_path.join(path);
-
-        entry.unpack(&path)?;
-    }
-
-    pb.finish_and_clear();
-    multi_progress.remove(&pb);
-
-    Ok(())
 }
 
 /// Install the specified version of Pushgateway into `pushgateway_path`.
@@ -283,7 +245,10 @@ async fn install_pushgateway(
     multi_progress: MultiProgress,
 ) -> Result<()> {
     let (os, arch) = determine_os_and_arch()?;
-    let package = format!("pushgateway-{pushgateway_version}.{os}-{arch}.tar.gz");
+
+    let base = format!("pushgateway-{pushgateway_version}.{os}-{arch}");
+    let package = format!("{base}.tar.gz");
+    let prefix = format!("{base}/");
 
     let mut pushgateway_archive = NamedTempFile::new()?;
 
@@ -310,53 +275,14 @@ async fn install_pushgateway(
     // unpack it.
     pushgateway_archive.as_file_mut().seek(SeekFrom::Start(0))?;
 
-    unpack_pushgateway(
+    unpack(
         pushgateway_archive.as_file(),
+        "pushgateway",
         pushgateway_path,
-        pushgateway_version,
+        &prefix,
         &multi_progress,
     )
     .await
-}
-
-/// Unpack the Pushgateway archive into the `pushgateway_path`. This will remove
-/// the prefix that is contained in the tar archive.
-async fn unpack_pushgateway(
-    archive: &File,
-    pushgateway_path: &PathBuf,
-    pushgateway_version: &str,
-    multi_progress: &MultiProgress,
-) -> Result<()> {
-    let (os, arch) = determine_os_and_arch()?;
-
-    let tar_file = GzDecoder::new(archive);
-    let mut ar = tar::Archive::new(tar_file);
-
-    // This prefix will be removed from the files in the archive.
-    let prefix = format!("pushgateway-{pushgateway_version}.{os}-{arch}/");
-
-    let pb = multi_progress.add(ProgressBar::new_spinner());
-    pb.set_style(ProgressStyle::default_spinner());
-    pb.enable_steady_tick(Duration::from_millis(120));
-    pb.set_message("Unpacking Pushgateway...");
-
-    for entry in ar.entries()? {
-        let mut entry = entry?;
-        let path = entry.path()?;
-
-        debug!("Unpacking {}", path.display());
-
-        // Remove the prefix and join it with the base directory.
-        let path = path.strip_prefix(&prefix)?.to_owned();
-        let path = pushgateway_path.join(path);
-
-        entry.unpack(&path)?;
-    }
-
-    pb.finish_and_clear();
-    multi_progress.remove(&pb);
-
-    Ok(())
 }
 
 /// Translates the OS and arch provided by Rust to the convention used by

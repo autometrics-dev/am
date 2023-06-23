@@ -1,11 +1,14 @@
 use crate::commands::start::CLIENT;
 use anyhow::{anyhow, bail, Result};
+use flate2::read::GzDecoder;
 use indicatif::{MultiProgress, ProgressBar, ProgressState, ProgressStyle};
 use sha2::{Digest, Sha256};
 use std::fmt;
 use std::fs::File;
 use std::io::{BufWriter, Write};
-use tracing::error;
+use std::path::PathBuf;
+use std::time::Duration;
+use tracing::{debug, error};
 
 /// downloads `package` into `destination`, returning the sha256sum hex-digest of the downloaded file
 pub async fn download_github_release(
@@ -98,5 +101,38 @@ pub async fn verify_checksum(
         bail!("checksum did not match");
     }
 
+    Ok(())
+}
+
+pub async fn unpack(
+    archive: &File,
+    package: &str,
+    destination_path: &PathBuf,
+    prefix: &str,
+    multi_progress: &MultiProgress,
+) -> Result<()> {
+    let tar_file = GzDecoder::new(archive);
+    let mut ar = tar::Archive::new(tar_file);
+
+    let pb = multi_progress.add(ProgressBar::new_spinner());
+    pb.set_style(ProgressStyle::default_spinner());
+    pb.enable_steady_tick(Duration::from_millis(120));
+    pb.set_message(format!("Unpacking {package}..."));
+
+    for entry in ar.entries()? {
+        let mut entry = entry?;
+        let path = entry.path()?;
+
+        debug!("Unpacking {}", path.display());
+
+        // Remove the prefix and join it with the base directory.
+        let path = path.strip_prefix(&prefix)?.to_owned();
+        let path = destination_path.join(path);
+
+        entry.unpack(&path)?;
+    }
+
+    pb.finish_and_clear();
+    multi_progress.remove(&pb);
     Ok(())
 }
