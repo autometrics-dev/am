@@ -1,6 +1,6 @@
 # am
 
-`am` is the autometrics companion terminal app. It makes it easier to create a
+`am` is the autometrics companion command line interface (CLI). It makes it easier to create a
 local Prometheus environment and inspect the metrics using the explorer.
 
 ## Features
@@ -9,8 +9,9 @@ local Prometheus environment and inspect the metrics using the explorer.
     - Prometheus - this will scrape, store and expose the metrics data
     - Pushgateway - allow for pushing metrics from batch jobs or short-lived
       processes
-    - Grafana (coming soon)
-- Explore your metrics using the explorer
+    - Grafana (coming soon!)
+- Visualize your metrics using the explorer
+- Inspect your Service Level Objectives (coming soon!)
 
 ## Getting started
 
@@ -27,8 +28,7 @@ Alternatively, you can download the latest version from the [releases page](http
 ### Quickstart
 
 
-The following will download, configure and start Prometheus, which will scrape
-your local service running on port 3000:
+The following will download, configure and start Prometheus. Assuming you've created an application that is running locally on port `3000` it will start scraping the metrics for that service on that port:
 
 ```
 am start :3000
