@@ -1,6 +1,6 @@
-use crate::downloader::download_github_release;
+use crate::downloader::{download_github_release, verify_checksum};
 use crate::interactive;
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{bail, Context, Result};
 use autometrics_am::prometheus;
 use axum::body::{self, Body};
 use axum::extract::Path;
@@ -209,7 +209,14 @@ async fn install_prometheus(
     )
     .await?;
 
-    verify_checksum_prometheus(calculated_checksum, prometheus_version, &package).await?;
+    verify_checksum(
+        &calculated_checksum,
+        "prometheus",
+        "prometheus",
+        prometheus_version,
+        &package,
+    )
+    .await?;
 
     // Make sure we set the position to the beginning of the file so that we can
     // unpack it.
@@ -222,46 +229,6 @@ async fn install_prometheus(
         &multi_progress,
     )
     .await
-}
-
-/// Verify the checksum of the downloaded Prometheus archive.
-///
-/// This will retrieve the checksum file from the Prometheus GitHub release page.
-async fn verify_checksum_prometheus(
-    calculated_checksum: String,
-    prometheus_version: &str,
-    package: &str,
-) -> Result<()> {
-    let checksums = CLIENT
-        .get(format!(
-            "https://github.com/prometheus/prometheus/releases/download/v{prometheus_version}/sha256sums.txt"
-        ))
-        .send()
-        .await?
-        .error_for_status()?
-        .text()
-        .await?;
-
-    // Go through all the lines in the checksum file and look for the one that
-    // we need for our current service/version/os/arch.
-    let expected_checksum = checksums
-        .lines()
-        .find_map(|line| match line.split_once("  ") {
-            Some((checksum, filename)) if package == filename => Some(checksum),
-            _ => None,
-        })
-        .ok_or_else(|| anyhow!("unable to find checksum for {package} in checksum list"))?;
-
-    if expected_checksum != calculated_checksum {
-        error!(
-            ?expected_checksum,
-            ?calculated_checksum,
-            "Calculated checksum for downloaded archive did not match expected checksum",
-        );
-        bail!("checksum did not match");
-    }
-
-    Ok(())
 }
 
 /// Unpack the Prometheus archive into the `prometheus_path`. This will remove
@@ -330,7 +297,14 @@ async fn install_pushgateway(
     )
     .await?;
 
-    verify_checksum_pushgateway(calculated_checksum, pushgateway_version, &package).await?;
+    verify_checksum(
+        &calculated_checksum,
+        "prometheus",
+        "pushgateway",
+        pushgateway_version,
+        &package,
+    )
+    .await?;
 
     // Make sure we set the position to the beginning of the file so that we can
     // unpack it.
@@ -343,46 +317,6 @@ async fn install_pushgateway(
         &multi_progress,
     )
     .await
-}
-
-/// Verify the checksum of the downloaded Prometheus archive.
-///
-/// This will retrieve the checksum file from the Prometheus GitHub release page.
-async fn verify_checksum_pushgateway(
-    calculated_checksum: String,
-    pushgateway_version: &str,
-    package: &str,
-) -> Result<()> {
-    let checksums = CLIENT
-        .get(format!(
-            "https://github.com/prometheus/pushgateway/releases/download/v{pushgateway_version}/sha256sums.txt"
-        ))
-        .send()
-        .await?
-        .error_for_status()?
-        .text()
-        .await?;
-
-    // Go through all the lines in the checksum file and look for the one that
-    // we need for our current service/version/os/arch.
-    let expected_checksum = checksums
-        .lines()
-        .find_map(|line| match line.split_once("  ") {
-            Some((checksum, filename)) if package == filename => Some(checksum),
-            _ => None,
-        })
-        .ok_or_else(|| anyhow!("unable to find checksum for {package} in checksum list"))?;
-
-    if expected_checksum != calculated_checksum {
-        error!(
-            ?expected_checksum,
-            ?calculated_checksum,
-            "Calculated checksum for downloaded archive did not match expected checksum",
-        );
-        bail!("checksum did not match");
-    }
-
-    Ok(())
 }
 
 /// Unpack the Pushgateway archive into the `pushgateway_path`. This will remove

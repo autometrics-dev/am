@@ -1,10 +1,11 @@
 use crate::commands::start::CLIENT;
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, bail, Result};
 use indicatif::{MultiProgress, ProgressBar, ProgressState, ProgressStyle};
 use sha2::{Digest, Sha256};
 use std::fmt;
 use std::fs::File;
 use std::io::{BufWriter, Write};
+use tracing::error;
 
 /// downloads `package` into `destination`, returning the sha256sum hex-digest of the downloaded file
 pub async fn download_github_release(
@@ -62,11 +63,40 @@ pub async fn download_github_release(
 }
 
 pub async fn verify_checksum(
-    _sha256sum: &str,
-    _org: &str,
-    _repo: &str,
-    _version: &str,
-    _package: &str,
+    sha256sum: &str,
+    org: &str,
+    repo: &str,
+    version: &str,
+    package: &str,
 ) -> Result<()> {
-    todo!()
+    let checksums = CLIENT
+        .get(format!(
+            "https://github.com/{org}/{repo}/releases/download/v{version}/sha256sums.txt"
+        ))
+        .send()
+        .await?
+        .error_for_status()?
+        .text()
+        .await?;
+
+    // Go through all the lines in the checksum file and look for the one that
+    // we need for our current service/version/os/arch.
+    let expected_checksum = checksums
+        .lines()
+        .find_map(|line| match line.split_once("  ") {
+            Some((checksum, filename)) if package == filename => Some(checksum),
+            _ => None,
+        })
+        .ok_or_else(|| anyhow!("unable to find checksum for {package} in checksum list"))?;
+
+    if expected_checksum != sha256sum {
+        error!(
+            ?expected_checksum,
+            calculated_checksum = ?sha256sum,
+            "Calculated checksum for downloaded archive did not match expected checksum",
+        );
+        bail!("checksum did not match");
+    }
+
+    Ok(())
 }
