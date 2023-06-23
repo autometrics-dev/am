@@ -3,6 +3,8 @@
 `am` is the autometrics companion command line interface (CLI). It makes it easier to create a
 local Prometheus environment and inspect the metrics using the explorer.
 
+![The Autometrics Explorer](./assets/explorer.png)
+
 ## Features
 
 - Download, configure and start various Prometheus components such as,
