@@ -28,7 +28,7 @@ use url::Url;
 
 // Create a reqwest client that will be used to make HTTP requests. This allows
 // for keep-alives if we are making multiple requests to the same host.
-pub static CLIENT: Lazy<reqwest::Client> = Lazy::new(|| {
+pub(crate) static CLIENT: Lazy<reqwest::Client> = Lazy::new(|| {
     reqwest::Client::builder()
         .user_agent(concat!("am/", env!("CARGO_PKG_VERSION")))
         .connect_timeout(Duration::from_secs(5))
