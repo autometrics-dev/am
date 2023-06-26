@@ -162,8 +162,7 @@ pub async fn handle_command(mut args: Arguments, mp: MultiProgress) -> Result<()
                 info!("Downloaded to: {:?}", &pushgateway_path);
             }
 
-            let pushgateway_config = generate_prom_config(pushgateway_args.metrics_endpoints)?;
-            start_pushgateway(&pushgateway_path, &pushgateway_config).await
+            start_pushgateway(&pushgateway_path).await
         }
         .boxed()
     } else {
@@ -453,7 +452,7 @@ async fn start_prometheus(
 
 /// Start a prometheus process. This will block until the Prometheus process
 /// stops.
-async fn start_pushgateway(pushgateway_path: &Path, _: &prometheus::Config) -> Result<()> {
+async fn start_pushgateway(pushgateway_path: &Path) -> Result<()> {
     info!("Starting Pushgateway");
     let mut child = process::Command::new(pushgateway_path.join("pushgateway"))
         .arg("--web.listen-address=:9091")
