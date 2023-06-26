@@ -2,6 +2,7 @@ use crate::interactive;
 use anyhow::{bail, Context, Result};
 use clap::Parser;
 use directories::ProjectDirs;
+use indicatif::MultiProgress;
 use std::io;
 use tracing::{debug, info};
 
@@ -13,7 +14,7 @@ pub struct Arguments {
     force: bool,
 }
 
-pub async fn handle_command(args: Arguments) -> Result<()> {
+pub async fn handle_command(args: Arguments, _: MultiProgress) -> Result<()> {
     // If the users hasn't specified the `force` argument, then ask the user if
     // they want to continue.
     if !args.force && !interactive::confirm("Prune all am program files?")? {

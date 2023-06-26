@@ -1,5 +1,6 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
+use indicatif::MultiProgress;
 
 pub mod prune;
 
@@ -16,8 +17,8 @@ pub enum SubCommands {
     Prune(prune::Arguments),
 }
 
-pub async fn handle_command(args: Arguments) -> Result<()> {
+pub async fn handle_command(args: Arguments, mp: MultiProgress) -> Result<()> {
     match args.command {
-        SubCommands::Prune(args) => prune::handle_command(args).await,
+        SubCommands::Prune(args) => prune::handle_command(args, mp).await,
     }
 }

@@ -1,5 +1,6 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
+use indicatif::MultiProgress;
 
 pub mod start;
 pub mod system;
@@ -24,10 +25,10 @@ pub enum SubCommands {
     MarkdownHelp,
 }
 
-pub async fn handle_command(app: Application) -> Result<()> {
+pub async fn handle_command(app: Application, mp: MultiProgress) -> Result<()> {
     match app.command {
-        SubCommands::Start(args) => start::handle_command(args).await,
-        SubCommands::System(args) => system::handle_command(args).await,
+        SubCommands::Start(args) => start::handle_command(args, mp).await,
+        SubCommands::System(args) => system::handle_command(args, mp).await,
         SubCommands::MarkdownHelp => {
             clap_markdown::print_help_markdown::<Application>();
             Ok(())
