@@ -497,7 +497,20 @@ async fn start_web_server(listen_address: &SocketAddr, args: Arguments) -> Resul
     debug!("Web server listening on {}", server.local_addr());
 
     info!("Explorer endpoint: http://{}", server.local_addr());
-    info!("Prometheus endpoint: http://127.0.0.1:9090");
+    info!("Prometheus endpoint: http://127.0.0.1:9090/prometheus");
+    if args.enable_pushgateway {
+        info!("Pushgateway endpoint: http://127.0.0.1:9091/pushgateway");
+    }
+
+    if !args.metrics_endpoints.is_empty() {
+        let endpoints = args
+            .metrics_endpoints
+            .iter()
+            .map(|endpoint| endpoint.to_string())
+            .collect::<Vec<String>>()
+            .join(", ");
+        info!("Now sampling the following {endpoints} for metrics");
+    }
 
     // TODO: Add support for graceful shutdown
     // server.with_graceful_shutdown(shutdown_signal()).await?;
