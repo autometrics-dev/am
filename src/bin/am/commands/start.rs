@@ -39,6 +39,13 @@ pub static CLIENT: Lazy<reqwest::Client> = Lazy::new(|| {
 #[derive(Parser, Clone)]
 pub struct Arguments {
     /// The endpoint(s) that Prometheus will scrape.
+    ///
+    /// Multiple endpoints can be specified by separating them with a space. The
+    /// endpoint can be provided in the following formats:
+    /// - `:3000`. Defaults to `http`, `localhost` and `/metrics`.
+    /// - `localhost:3000`. Defaults to `http`, and `/metrics`.
+    /// - `https://localhost:3000`. Defaults to `/metrics`.
+    /// - `https://localhost:3000/api/metrics`. No defaults.
     #[clap(value_parser = endpoint_parser)]
     metrics_endpoints: Vec<Url>,
 
@@ -52,11 +59,16 @@ pub struct Arguments {
     #[clap(short, long, env, default_value = "127.0.0.1:6789")]
     listen_address: SocketAddr,
 
-    /// Startup the pushgateway as well.
+    /// Enable pushgateway.
+    ///
+    /// Pushgateway accepts metrics from other applications and exposes these to
+    /// Prometheus. This is useful for applications that cannot be scraped,
+    /// either cause they are short-lived (like functions), or Prometheus cannot
+    /// reach them (like client-side applications).
     #[clap(short, long, env)]
     enable_pushgateway: bool,
 
-    /// The pushgateway version to use. Leave empty to use the latest version.
+    /// The pushgateway version to use.
     #[clap(long, env, default_value = "v1.6.0")]
     pushgateway_version: String,
 }
