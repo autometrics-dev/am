@@ -56,7 +56,13 @@ pub struct Arguments {
     /// The listen address for the web server of am.
     ///
     /// This includes am's HTTP API, the explorer and the proxy to the Prometheus, Gateway, etc.
-    #[clap(short, long, env, default_value = "127.0.0.1:6789")]
+    #[clap(
+        short,
+        long,
+        env,
+        default_value = "127.0.0.1:6789",
+        alias = "explorer-address"
+    )]
     listen_address: SocketAddr,
 
     /// Enable pushgateway.
