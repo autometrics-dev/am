@@ -131,7 +131,7 @@ pub async fn handle_command(mut args: Arguments, mp: MultiProgress) -> Result<()
             .await?;
             debug!("Downloaded Prometheus to: {:?}", &prometheus_path);
         } else {
-            debug!("Found prometheus in: {}", prometheus_path.display());
+            debug!("Found prometheus in: {:?}", prometheus_path);
         }
 
         let prometheus_config = generate_prom_config(prometheus_args.metrics_endpoints)?;
@@ -159,7 +159,9 @@ pub async fn handle_command(mut args: Arguments, mp: MultiProgress) -> Result<()
                     pushgateway_multi_progress,
                 )
                 .await?;
-                info!("Downloaded to: {:?}", &pushgateway_path);
+                debug!("Downloaded pushgateway to: {:?}", &pushgateway_path);
+            } else {
+                debug!("Found pushgateway in: {:?}", &pushgateway_path);
             }
 
             start_pushgateway(&pushgateway_path).await
