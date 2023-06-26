@@ -16,8 +16,8 @@ pub fn confirm(prompt: impl Into<String>) -> Result<bool> {
         .interact()?)
 }
 
-/// A Writer that will suspend any progress bar during calls to the write trait.
-/// This will prevent the output from being mangled.
+/// A Writer that will output to stderr. It will also suspend any progress bars,
+/// so that the output of the progress bar is not mangled.
 ///
 /// The main use case for this is to use it in conjunction with other components
 /// that write to stderr, such as the tracing library. If both indicatif and
