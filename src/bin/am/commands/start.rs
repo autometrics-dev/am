@@ -4,7 +4,7 @@ use anyhow::{bail, Context, Result};
 use autometrics_am::prometheus;
 use axum::body::{self, Body};
 use axum::extract::Path;
-use axum::response::{IntoResponse, Response};
+use axum::response::{IntoResponse, Redirect, Response};
 use axum::routing::{any, get};
 use axum::Router;
 use clap::Parser;
@@ -462,7 +462,13 @@ async fn start_pushgateway(pushgateway_path: &PathBuf, _: &prometheus::Config) -
 
 async fn start_web_server(listen_address: &SocketAddr, args: Arguments) -> Result<()> {
     let mut app = Router::new()
-        // .route("/api/ ... ") // This can expose endpoints that the ui app can call
+        // Any calls to the root should be redirected to the explorer which is most likely what the user wants to use.
+        .route("/", get(|| async { Redirect::permanent("/explorer/") }))
+        .route(
+            "/explorer",
+            get(|| async { Redirect::permanent("/explorer/") }),
+        )
+        .route("/explorer/", get(explorer_root_handler))
         .route("/explorer/*path", get(explorer_handler))
         .route("/prometheus/*path", any(prometheus_handler))
         .route("/prometheus", any(prometheus_handler));
@@ -491,13 +497,29 @@ async fn start_web_server(listen_address: &SocketAddr, args: Arguments) -> Resul
 
 static STATIC_DIR: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/files/explorer");
 
-async fn explorer_handler(Path(path): Path<String>) -> impl IntoResponse {
-    let path = path.trim_start_matches('/');
+/// This will serve the "index.html" file from the explorer directory.
+///
+/// This needs to be a separate handler since otherwise the Path extractor will
+/// fail since the root does not have a path.
+async fn explorer_root_handler() -> impl IntoResponse {
+    serve_explorer("index.html").await
+}
 
-    trace!("Serving static file {}", path);
+/// This will look at the path of the request and serve the corresponding file.
+async fn explorer_handler(Path(path): Path<String>) -> impl IntoResponse {
+    serve_explorer(&path).await
+}
+
+/// Server a specific file from the explorer directory. Returns 404 if the file
+/// was not found.
+async fn serve_explorer(path: &str) -> impl IntoResponse {
+    trace!(?path, "Serving static file");
 
     match STATIC_DIR.get_file(path) {
-        None => StatusCode::NOT_FOUND.into_response(),
+        None => {
+            warn!(?path, "Request file was not found in the explorer assets");
+            StatusCode::NOT_FOUND.into_response()
+        }
         Some(file) => Response::builder()
             .status(StatusCode::OK)
             .body(body::boxed(body::Full::from(file.contents())))
