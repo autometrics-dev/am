@@ -436,6 +436,9 @@ async fn start_prometheus(
         .arg("--web.listen-address=:9090")
         .arg("--web.enable-lifecycle")
         .arg("--web.external-url=http://localhost:6789/prometheus") // TODO: Make sure this matches with that is actually running.
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
         .spawn()
         .context("Unable to start Prometheus")?;
 
@@ -455,6 +458,9 @@ async fn start_pushgateway(pushgateway_path: &PathBuf, _: &prometheus::Config) -
     let mut child = process::Command::new(pushgateway_path.join("pushgateway"))
         .arg("--web.listen-address=:9091")
         .arg("--web.external-url=http://localhost:6789/pushgateway") // TODO: Make sure this matches with that is actually running.
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
         .spawn()
         .context("Unable to start Pushgateway")?;
 
