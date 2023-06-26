@@ -4,7 +4,7 @@ use anyhow::{bail, Context, Result};
 use autometrics_am::prometheus;
 use axum::body::{self, Body};
 use axum::extract::Path;
-use axum::response::{IntoResponse, Response};
+use axum::response::{IntoResponse, Redirect, Response};
 use axum::routing::{any, get};
 use axum::Router;
 use clap::Parser;
@@ -28,7 +28,7 @@ use url::Url;
 
 // Create a reqwest client that will be used to make HTTP requests. This allows
 // for keep-alives if we are making multiple requests to the same host.
-pub static CLIENT: Lazy<reqwest::Client> = Lazy::new(|| {
+pub(crate) static CLIENT: Lazy<reqwest::Client> = Lazy::new(|| {
     reqwest::Client::builder()
         .user_agent(concat!("am/", env!("CARGO_PKG_VERSION")))
         .connect_timeout(Duration::from_secs(5))
@@ -39,7 +39,14 @@ pub static CLIENT: Lazy<reqwest::Client> = Lazy::new(|| {
 #[derive(Parser, Clone)]
 pub struct Arguments {
     /// The endpoint(s) that Prometheus will scrape.
-    #[clap(value_parser = endpoint_parser)]
+    ///
+    /// Multiple endpoints can be specified by separating them with a space.
+    /// The endpoint can be provided in the following formats:
+    /// - `:3000`. Defaults to `http`, `localhost` and `/metrics`.
+    /// - `localhost:3000`. Defaults to `http`, and `/metrics`.
+    /// - `https://localhost:3000`. Defaults to `/metrics`.
+    /// - `https://localhost:3000/api/metrics`. No defaults.
+    #[clap(value_parser = endpoint_parser, verbatim_doc_comment)]
     metrics_endpoints: Vec<Url>,
 
     /// The Prometheus version to use.
@@ -49,14 +56,25 @@ pub struct Arguments {
     /// The listen address for the web server of am.
     ///
     /// This includes am's HTTP API, the explorer and the proxy to the Prometheus, Gateway, etc.
-    #[clap(short, long, env, default_value = "127.0.0.1:6789")]
+    #[clap(
+        short,
+        long,
+        env,
+        default_value = "127.0.0.1:6789",
+        alias = "explorer-address"
+    )]
     listen_address: SocketAddr,
 
-    /// Startup the pushgateway as well.
+    /// Enable pushgateway.
+    ///
+    /// Pushgateway accepts metrics from other applications and exposes these to
+    /// Prometheus. This is useful for applications that cannot be scraped,
+    /// either cause they are short-lived (like functions), or Prometheus cannot
+    /// reach them (like client-side applications).
     #[clap(short, long, env)]
     enable_pushgateway: bool,
 
-    /// The pushgateway version to use. Leave empty to use the latest version.
+    /// The pushgateway version to use.
     #[clap(long, env, default_value = "v1.6.0")]
     pushgateway_version: String,
 }
@@ -450,7 +468,13 @@ async fn start_pushgateway(pushgateway_path: &PathBuf, _: &prometheus::Config) -
 
 async fn start_web_server(listen_address: &SocketAddr, args: Arguments) -> Result<()> {
     let mut app = Router::new()
-        // .route("/api/ ... ") // This can expose endpoints that the ui app can call
+        // Any calls to the root should be redirected to the explorer which is most likely what the user wants to use.
+        .route("/", get(|| async { Redirect::temporary("/explorer/") }))
+        .route(
+            "/explorer",
+            get(|| async { Redirect::permanent("/explorer/") }),
+        )
+        .route("/explorer/", get(explorer_root_handler))
         .route("/explorer/*path", get(explorer_handler))
         .route("/prometheus/*path", any(prometheus_handler))
         .route("/prometheus", any(prometheus_handler));
@@ -479,13 +503,29 @@ async fn start_web_server(listen_address: &SocketAddr, args: Arguments) -> Resul
 
 static STATIC_DIR: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/files/explorer");
 
-async fn explorer_handler(Path(path): Path<String>) -> impl IntoResponse {
-    let path = path.trim_start_matches('/');
+/// This will serve the "index.html" file from the explorer directory.
+///
+/// This needs to be a separate handler since otherwise the Path extractor will
+/// fail since the root does not have a path.
+async fn explorer_root_handler() -> impl IntoResponse {
+    serve_explorer("index.html").await
+}
 
-    trace!("Serving static file {}", path);
+/// This will look at the path of the request and serve the corresponding file.
+async fn explorer_handler(Path(path): Path<String>) -> impl IntoResponse {
+    serve_explorer(&path).await
+}
+
+/// Server a specific file from the explorer directory. Returns 404 if the file
+/// was not found.
+async fn serve_explorer(path: &str) -> impl IntoResponse {
+    trace!(?path, "Serving static file");
 
     match STATIC_DIR.get_file(path) {
-        None => StatusCode::NOT_FOUND.into_response(),
+        None => {
+            warn!(?path, "Request file was not found in the explorer assets");
+            StatusCode::NOT_FOUND.into_response()
+        }
         Some(file) => Response::builder()
             .status(StatusCode::OK)
             .body(body::boxed(body::Full::from(file.contents())))
