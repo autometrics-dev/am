@@ -3,7 +3,7 @@ use crate::interactive;
 use anyhow::{bail, Context, Result};
 use autometrics_am::prometheus;
 use axum::body::{self, Body};
-use axum::extract::Path;
+use axum::extract::Path as AxumPath;
 use axum::response::{IntoResponse, Redirect, Response};
 use axum::routing::{any, get};
 use axum::Router;
@@ -17,7 +17,7 @@ use once_cell::sync::Lazy;
 use std::fs::File;
 use std::io::{Seek, SeekFrom};
 use std::net::SocketAddr;
-use std::path::PathBuf;
+use std::path::Path;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 use std::vec;
@@ -179,7 +179,7 @@ pub async fn handle_command(mut args: Arguments, mp: MultiProgress) -> Result<()
 
         _ = tokio::signal::ctrl_c() => {
             debug!("sigint received by user, exiting...");
-            return Ok(())
+            Ok(())
         }
 
         Err(err) = prometheus_task => {
@@ -195,7 +195,7 @@ pub async fn handle_command(mut args: Arguments, mp: MultiProgress) -> Result<()
         }
 
         else => {
-            return Ok(());
+            Ok(())
         }
     }
 }
@@ -207,7 +207,7 @@ pub async fn handle_command(mut args: Arguments, mp: MultiProgress) -> Result<()
 /// downloaded checksum. Finally it will unpack the archive into
 /// `prometheus_path`.
 async fn install_prometheus(
-    prometheus_path: &PathBuf,
+    prometheus_path: &Path,
     prometheus_version: &str,
     multi_progress: MultiProgress,
 ) -> Result<()> {
@@ -258,7 +258,7 @@ async fn install_prometheus(
 /// downloaded checksum. Finally it will unpack the archive into
 /// `pushgateway_path`.
 async fn install_pushgateway(
-    pushgateway_path: &PathBuf,
+    pushgateway_path: &Path,
     pushgateway_version: &str,
     multi_progress: MultiProgress,
 ) -> Result<()> {
@@ -402,7 +402,7 @@ async fn check_endpoint(url: &Url) -> Result<()> {
 /// Start a prometheus process. This will block until the Prometheus process
 /// stops.
 async fn start_prometheus(
-    prometheus_path: &PathBuf,
+    prometheus_path: &Path,
     prometheus_config: &prometheus::Config,
 ) -> Result<()> {
     // First write the config to a temp file
@@ -453,7 +453,7 @@ async fn start_prometheus(
 
 /// Start a prometheus process. This will block until the Prometheus process
 /// stops.
-async fn start_pushgateway(pushgateway_path: &PathBuf, _: &prometheus::Config) -> Result<()> {
+async fn start_pushgateway(pushgateway_path: &Path, _: &prometheus::Config) -> Result<()> {
     info!("Starting Pushgateway");
     let mut child = process::Command::new(pushgateway_path.join("pushgateway"))
         .arg("--web.listen-address=:9091")
@@ -518,7 +518,7 @@ async fn explorer_root_handler() -> impl IntoResponse {
 }
 
 /// This will look at the path of the request and serve the corresponding file.
-async fn explorer_handler(Path(path): Path<String>) -> impl IntoResponse {
+async fn explorer_handler(AxumPath(path): AxumPath<String>) -> impl IntoResponse {
     serve_explorer(&path).await
 }
 
