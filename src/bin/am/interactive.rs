@@ -5,15 +5,15 @@ use std::io::{stderr, IoSlice, Result, Write};
 use tracing_subscriber::fmt::MakeWriter;
 
 pub fn user_input(prompt: impl Into<String>) -> Result<String> {
-    Ok(Input::with_theme(&SimpleTheme)
+    Input::with_theme(&SimpleTheme)
         .with_prompt(prompt)
-        .interact()?)
+        .interact()
 }
 
 pub fn confirm(prompt: impl Into<String>) -> Result<bool> {
-    Ok(Confirm::with_theme(&SimpleTheme)
+    Confirm::with_theme(&SimpleTheme)
         .with_prompt(prompt)
-        .interact()?)
+        .interact()
 }
 
 /// A Writer that will output to stderr. It will also suspend any progress bars,

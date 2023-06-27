@@ -3,7 +3,7 @@ use crate::interactive;
 use anyhow::{bail, Context, Result};
 use autometrics_am::prometheus;
 use axum::body::{self, Body};
-use axum::extract::Path;
+use axum::extract::Path as AxumPath;
 use axum::response::{IntoResponse, Redirect, Response};
 use axum::routing::{any, get};
 use axum::Router;
@@ -17,7 +17,7 @@ use once_cell::sync::Lazy;
 use std::fs::File;
 use std::io::{Seek, SeekFrom};
 use std::net::SocketAddr;
-use std::path::PathBuf;
+use std::path::Path;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 use std::vec;
@@ -131,7 +131,7 @@ pub async fn handle_command(mut args: Arguments, mp: MultiProgress) -> Result<()
             .await?;
             debug!("Downloaded Prometheus to: {:?}", &prometheus_path);
         } else {
-            debug!("Found prometheus in: {}", prometheus_path.display());
+            debug!("Found prometheus in: {:?}", prometheus_path);
         }
 
         let prometheus_config = generate_prom_config(prometheus_args.metrics_endpoints)?;
@@ -159,11 +159,12 @@ pub async fn handle_command(mut args: Arguments, mp: MultiProgress) -> Result<()
                     pushgateway_multi_progress,
                 )
                 .await?;
-                info!("Downloaded to: {:?}", &pushgateway_path);
+                debug!("Downloaded pushgateway to: {:?}", &pushgateway_path);
+            } else {
+                debug!("Found pushgateway in: {:?}", &pushgateway_path);
             }
 
-            let pushgateway_config = generate_prom_config(pushgateway_args.metrics_endpoints)?;
-            start_pushgateway(&pushgateway_path, &pushgateway_config).await
+            start_pushgateway(&pushgateway_path).await
         }
         .boxed()
     } else {
@@ -179,7 +180,7 @@ pub async fn handle_command(mut args: Arguments, mp: MultiProgress) -> Result<()
 
         _ = tokio::signal::ctrl_c() => {
             debug!("sigint received by user, exiting...");
-            return Ok(())
+            Ok(())
         }
 
         Err(err) = prometheus_task => {
@@ -195,7 +196,7 @@ pub async fn handle_command(mut args: Arguments, mp: MultiProgress) -> Result<()
         }
 
         else => {
-            return Ok(());
+            Ok(())
         }
     }
 }
@@ -207,7 +208,7 @@ pub async fn handle_command(mut args: Arguments, mp: MultiProgress) -> Result<()
 /// downloaded checksum. Finally it will unpack the archive into
 /// `prometheus_path`.
 async fn install_prometheus(
-    prometheus_path: &PathBuf,
+    prometheus_path: &Path,
     prometheus_version: &str,
     multi_progress: MultiProgress,
 ) -> Result<()> {
@@ -258,7 +259,7 @@ async fn install_prometheus(
 /// downloaded checksum. Finally it will unpack the archive into
 /// `pushgateway_path`.
 async fn install_pushgateway(
-    pushgateway_path: &PathBuf,
+    pushgateway_path: &Path,
     pushgateway_version: &str,
     multi_progress: MultiProgress,
 ) -> Result<()> {
@@ -402,7 +403,7 @@ async fn check_endpoint(url: &Url) -> Result<()> {
 /// Start a prometheus process. This will block until the Prometheus process
 /// stops.
 async fn start_prometheus(
-    prometheus_path: &PathBuf,
+    prometheus_path: &Path,
     prometheus_config: &prometheus::Config,
 ) -> Result<()> {
     // First write the config to a temp file
@@ -436,6 +437,9 @@ async fn start_prometheus(
         .arg("--web.listen-address=:9090")
         .arg("--web.enable-lifecycle")
         .arg("--web.external-url=http://localhost:6789/prometheus") // TODO: Make sure this matches with that is actually running.
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
         .spawn()
         .context("Unable to start Prometheus")?;
 
@@ -450,11 +454,14 @@ async fn start_prometheus(
 
 /// Start a prometheus process. This will block until the Prometheus process
 /// stops.
-async fn start_pushgateway(pushgateway_path: &PathBuf, _: &prometheus::Config) -> Result<()> {
+async fn start_pushgateway(pushgateway_path: &Path) -> Result<()> {
     info!("Starting Pushgateway");
     let mut child = process::Command::new(pushgateway_path.join("pushgateway"))
         .arg("--web.listen-address=:9091")
         .arg("--web.external-url=http://localhost:6789/pushgateway") // TODO: Make sure this matches with that is actually running.
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
         .spawn()
         .context("Unable to start Pushgateway")?;
 
@@ -492,7 +499,20 @@ async fn start_web_server(listen_address: &SocketAddr, args: Arguments) -> Resul
     debug!("Web server listening on {}", server.local_addr());
 
     info!("Explorer endpoint: http://{}", server.local_addr());
-    info!("Prometheus endpoint: http://127.0.0.1:9090");
+    info!("Prometheus endpoint: http://127.0.0.1:9090/prometheus");
+    if args.enable_pushgateway {
+        info!("Pushgateway endpoint: http://127.0.0.1:9091/pushgateway");
+    }
+
+    if !args.metrics_endpoints.is_empty() {
+        let endpoints = args
+            .metrics_endpoints
+            .iter()
+            .map(|endpoint| endpoint.to_string())
+            .collect::<Vec<String>>()
+            .join(", ");
+        info!("Now sampling the following {endpoints} for metrics");
+    }
 
     // TODO: Add support for graceful shutdown
     // server.with_graceful_shutdown(shutdown_signal()).await?;
@@ -512,7 +532,7 @@ async fn explorer_root_handler() -> impl IntoResponse {
 }
 
 /// This will look at the path of the request and serve the corresponding file.
-async fn explorer_handler(Path(path): Path<String>) -> impl IntoResponse {
+async fn explorer_handler(AxumPath(path): AxumPath<String>) -> impl IntoResponse {
     serve_explorer(&path).await
 }
 

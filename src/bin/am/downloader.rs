@@ -6,7 +6,7 @@ use sha2::{Digest, Sha256};
 use std::fmt;
 use std::fs::File;
 use std::io::{BufWriter, Write};
-use std::path::PathBuf;
+use std::path::Path;
 use std::time::Duration;
 use tracing::{debug, error};
 
@@ -107,7 +107,7 @@ pub async fn verify_checksum(
 pub async fn unpack(
     archive: &File,
     package: &str,
-    destination_path: &PathBuf,
+    destination_path: &Path,
     prefix: &str,
     multi_progress: &MultiProgress,
 ) -> Result<()> {
@@ -126,7 +126,7 @@ pub async fn unpack(
         debug!("Unpacking {}", path.display());
 
         // Remove the prefix and join it with the base directory.
-        let path = path.strip_prefix(&prefix)?.to_owned();
+        let path = path.strip_prefix(prefix)?.to_owned();
         let path = destination_path.join(path);
 
         entry.unpack(&path)?;
