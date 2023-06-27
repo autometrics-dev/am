@@ -24,7 +24,7 @@ local Prometheus environment and inspect the metrics using the explorer.
 The recommended installation for macOS is via [Homebrew](https://brew.sh/):
 
 ```
-brew install autometrics-dev/am
+brew install autometrics-dev/tap/am
 ```
 
 Alternatively, you can download the latest version from the [releases page](https://github.com/autometrics-dev/am/releases)
