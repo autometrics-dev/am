@@ -20,9 +20,10 @@ jobs:
           fi
 
   attach-artifacts:
-    name: build and attach artifacts to release (${{ matrix.platform.name }})
+    name: (${{ matrix.platform.name }}) build and attach artifacts to release
     permissions:
       contents: write
+    needs: validate-version
     strategy:
       matrix:
         platform:
