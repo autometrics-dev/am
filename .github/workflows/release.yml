@@ -21,6 +21,8 @@ jobs:
 
   attach-artifacts:
     name: build and attach artifacts to release (${{ matrix.platform.name }})
+    permissions:
+      contents: write
     strategy:
       matrix:
         platform:
