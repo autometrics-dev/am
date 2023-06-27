@@ -62,6 +62,8 @@ If you are interested in getting involved:
 - Ask questions and share ideas in the [Github Discussions](https://github.com/orgs/autometrics-dev/discussions)
 - Take a look at the overall [Autometrics Project Roadmap](https://github.com/orgs/autometrics-dev/projects/1)
 
+Planning to release a new version of `am`? Take a look at our [releasing](RELEASING.md) guide.
+
 ## License
 
 `am` is distributed under the terms of both the MIT license and the Apache. See
