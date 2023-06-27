@@ -50,9 +50,11 @@ jobs:
           target: ${{ matrix.platform.target }}
           args: "--locked --release"
           strip: true
-      - name: rename artifacts to include release
-        run: mv ${{ matrix.platform.bin }} ${{ matrix.platform.bin }}-${{ matrix.platform.target }}
+      - name: prepare binary
+        run: |
+          mkdir -p /tmp/artifact/
+          cp "target/${{ matrix.platform.target }}/release/am" "/tmp/artifact/am-${{ matrix.platform.bin }}-${{ matrix.platform.target }}"
       - name: attach artifact to release
         uses: softprops/action-gh-release@v1
         with:
-          files: ${{ matrix.platform.bin }}-${{ matrix.platform.target }}
+          files: "/tmp/artifact/am-${{ matrix.platform.bin }}-${{ matrix.platform.target }}"
