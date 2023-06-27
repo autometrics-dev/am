@@ -30,18 +30,22 @@ jobs:
             os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             bin: am
+            file-name: am-linux-x86_64
           - name: linux_aarch64
             os: ubuntu-latest
             target: aarch64-unknown-linux-gnu
             bin: am
+            file-name: am-linux-aarch64
           - name: macos_x86_64
             os: macOS-latest
             target: x86_64-apple-darwin
             bin: am
+            file-name: am-macos-x86_64
           - name: macos_aarch64
             os: macOS-latest
             target: aarch64-apple-darwin
             bin: am
+            file-name: am-macos-aarch64
     runs-on: ${{ matrix.platform.os }}
     steps:
       - name: checkout
@@ -55,8 +59,8 @@ jobs:
       - name: prepare binary
         run: |
           mkdir -p /tmp/artifact/
-          cp "target/${{ matrix.platform.target }}/release/am" "/tmp/artifact/am-${{ matrix.platform.bin }}-${{ matrix.platform.target }}"
+          cp "target/${{ matrix.platform.target }}/release/${{ matrix.platform.bin }}" "/tmp/artifact/${{ matrix.platform.file-name }}"
       - name: attach artifact to release
         uses: softprops/action-gh-release@v1
         with:
-          files: "/tmp/artifact/am-${{ matrix.platform.bin }}-${{ matrix.platform.target }}"
+          files: "/tmp/artifact/${{ matrix.platform.file-name }}"
