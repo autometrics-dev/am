@@ -3,7 +3,7 @@
 `am` is the autometrics companion command line interface (CLI). It makes it easier to create a
 local Prometheus environment and inspect the metrics using the explorer.
 
-![The Autometrics Explorer](./assets/explorer.png)
+![The Autometrics Explorer](./assets/am-explorer.png)
 
 ## Features
 
@@ -47,6 +47,10 @@ It is also possible to specify multiple endpoints:
 ```
 am start :3000 :3030
 ```
+
+Now you can visualize and inspect your metrics using the explorer by visiting `http://localhost:6789/`.
+
+![The Autometrics Explorer](./assets/explorer.png)
 
 ## Documentation
 
