@@ -1,0 +1,56 @@
+on:
+  release:
+    types:
+      - published
+
+jobs:
+  validate-version:
+    name: validate `Cargo.toml` version matches tag
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout
+        uses: actions/checkout@v3
+      - name: validate version
+        run: |
+          # Extract the version from the Cargo.toml
+          VERSION=$(cat "Cargo.toml" | grep '^version' | awk '{ split($0,version,"=") ; gsub(/[\ \"]/, "", version[2]) ; print version[2] }')
+          if [ "v${VERSION}" != "${{ github.event.release.tag_name }}" ]; then
+            echo "::error file=Cargo.toml::Version set in Cargo.toml (v${VERSION}) does not match release version (${{ github.event.release.tag_name }})"
+            exit 1
+          fi
+
+  attach-artifacts:
+    name: build and attach artifacts to release (${{ matrix.platform.name }})
+    strategy:
+      matrix:
+        platform:
+          - name: linux_x86_64
+            os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            bin: am
+          - name: linux_aarch64
+            os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            bin: am
+          - name: macos_x86_64
+            os: macOS-latest
+            target: x86_64-apple-darwin
+            bin: am
+          - name: macos_aarch64
+            os: macOS-latest
+            target: aarch64-apple-darwin
+            bin: am
+    runs-on: ${{ matrix.platform.os }}
+    steps:
+      - name: checkout
+        uses: actions/checkout@v3
+      - name: build
+        uses: houseabsolute/actions-rust-cross@v0
+        with:
+          target: ${{ matrix.platform.target }}
+          args: "--locked --release"
+          strip: true
+      - name: attach artifact to release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: ${{ matrix.platform.bin }}
