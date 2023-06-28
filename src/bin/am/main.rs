@@ -45,8 +45,7 @@ async fn main() {
 fn init_logging(app: &Application, writer: IndicatifWriter) -> Result<()> {
     let (filter_layer, log_layer) = if app.verbose {
         let filter_layer = EnvFilter::try_from_default_env()
-            .unwrap_or_else(|_| EnvFilter::default().add_directive(LevelFilter::DEBUG.into()));
-        // TODO: ^ only am on DEBUG, rest on INFO
+            .unwrap_or_else(|_| EnvFilter::try_new("am=debug,info").unwrap());
 
         let log_layer = tracing_subscriber::fmt::layer().with_writer(writer).boxed();
 
