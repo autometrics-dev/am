@@ -94,12 +94,14 @@ pub async fn handle_command(mut args: Arguments, mp: MultiProgress) -> Result<()
     std::fs::create_dir_all(&local_data)
         .with_context(|| format!("Unable to create data directory: {:?}", local_data))?;
 
-    info!("Checking if provided metrics endpoints work...");
+    if !args.metrics_endpoints.is_empty() {
+        info!("Checking if provided metrics endpoints work...");
 
-    // check if the provided endpoint works
-    for endpoint in &args.metrics_endpoints {
-        if let Err(err) = check_endpoint(endpoint).await {
-            warn!(?endpoint, "Failed to contact endpoint: {err:?}");
+        // check if the provided endpoint works
+        for endpoint in &args.metrics_endpoints {
+            if let Err(err) = check_endpoint(endpoint).await {
+                warn!(?endpoint, "Failed to contact endpoint: {err:?}");
+            }
         }
     }
 
@@ -179,7 +181,7 @@ pub async fn handle_command(mut args: Arguments, mp: MultiProgress) -> Result<()
         biased;
 
         _ = tokio::signal::ctrl_c() => {
-            debug!("sigint received by user, exiting...");
+            info!("SIGINT signal received, exiting...");
             Ok(())
         }
 
@@ -421,8 +423,6 @@ async fn start_prometheus(
     // through an api.
     // TODO: Change the working directory, maybe make it configurable?
 
-    info!("Starting prometheus");
-
     #[cfg(not(target_os = "windows"))]
     let program = "prometheus";
     #[cfg(target_os = "windows")]
@@ -430,7 +430,7 @@ async fn start_prometheus(
 
     let prometheus_path = prometheus_path.join(program);
 
-    debug!("Invoking prometheus at {}", prometheus_path.display());
+    info!(bin_path = ?prometheus_path.display(), "Starting prometheus");
 
     let mut child = process::Command::new(prometheus_path)
         .arg(format!("--config.file={}", config_file_path.display()))
