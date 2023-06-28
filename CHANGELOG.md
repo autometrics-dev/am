@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- Make logging less verbose, and introduce a `--verbose` flag to verbose logging (#62)
+
+## [0.1.0]
+
 - Initial release
 - Instead of only copying the prometheus binary, simply extract everything (#17)
 - Add more flexible endpoints parser (#21)
