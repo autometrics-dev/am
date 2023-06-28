@@ -10,15 +10,26 @@ pub mod system;
 pub struct Application {
     #[command(subcommand)]
     pub command: SubCommands,
+
+    /// Enable verbose logging. By enabling this you are also able to use
+    /// RUST_LOG environment variable to change the log levels of other
+    /// modules.
+    ///
+    /// By default we will only log INFO level messages of all modules. If this
+    /// flag is enabled, then we will log the message from `am` with DEBUG
+    /// level, other modules still use the INFO level.
+    #[clap(long, short)]
+    pub verbose: bool,
 }
 
 #[derive(Subcommand)]
 pub enum SubCommands {
-    /// Start scraping the specified endpoint, while also providing a web
+    /// Start scraping the specified endpoint(s), while also providing a web
     /// interface to inspect the autometrics data.
     Start(start::Arguments),
 
-    /// Manage am related system settings.
+    /// Manage am related system settings. Such as cleaning up downloaded
+    /// Prometheus, Pushgateway installs.
     System(system::Arguments),
 
     #[clap(hide = true)]
