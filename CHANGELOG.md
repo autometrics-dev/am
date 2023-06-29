@@ -15,6 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added new subcommand `discord` which links to the discord server (#80)
 - The `/metrics` endpoint now transparently redirects to `/pushgateway/metrics` if
   Pushgateway is enabled (#81)
+- Allow using a config file (am.toml) to set some defaults such as endpoints or
+  if pushgateway is enabled (#67)
 
 ## [0.1.0]
 

@@ -1,0 +1,9 @@
+pushgateway-enabled = true
+
+[[endpoint]]
+# job-name = "main_app"
+url = "http://localhost:3030"
+
+[[endpoint]]
+job-name = "secondary_app"
+url = "http://localhost:3030"

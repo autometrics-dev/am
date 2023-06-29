@@ -1,6 +1,8 @@
 use anyhow::Result;
+use autometrics_am::config::AmConfig;
 use clap::{Parser, Subcommand};
 use indicatif::MultiProgress;
+use std::path::PathBuf;
 use tracing::info;
 
 pub mod start;
@@ -21,13 +23,17 @@ pub struct Application {
     /// level, other modules still use the INFO level.
     #[clap(long, short)]
     pub verbose: bool,
+
+    /// Use the following file to define defaults for am.
+    #[clap(long, env)]
+    pub config_file: Option<PathBuf>,
 }
 
 #[derive(Subcommand)]
 pub enum SubCommands {
     /// Start scraping the specified endpoint(s), while also providing a web
     /// interface to inspect the autometrics data.
-    Start(start::Arguments),
+    Start(start::CliArguments),
 
     /// Manage am related system settings. Such as cleaning up downloaded
     /// Prometheus, Pushgateway installs.
@@ -41,9 +47,9 @@ pub enum SubCommands {
     MarkdownHelp,
 }
 
-pub async fn handle_command(app: Application, mp: MultiProgress) -> Result<()> {
+pub async fn handle_command(app: Application, config: AmConfig, mp: MultiProgress) -> Result<()> {
     match app.command {
-        SubCommands::Start(args) => start::handle_command(args, mp).await,
+        SubCommands::Start(args) => start::handle_command(args, config, mp).await,
         SubCommands::System(args) => system::handle_command(args, mp).await,
         SubCommands::Discord => {
             const URL: &str = "https://discord.gg/kHtwcH8As9";

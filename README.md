@@ -59,6 +59,22 @@ Now you can visualize and inspect your metrics using the explorer by visiting `h
 Visit the autometrics docs site for more details on how to use `am` and more
 details about autometrics: https://docs.autometrics.dev/
 
+## Configuration
+
+`am` support defining a few configuration details in a `am.toml` file. These
+will be used by `am start`. Committing the `am.toml` file into git allows your
+entire team to have the settings as they are for your application. Example:
+
+```toml
+pushgateway-enabled = true
+
+[[endpoint]]
+job-name = "main_app"
+url = "http://localhost:3030"
+```
+
+See [https://docs.autometrics.dev/local-development#configration](https://docs.autometrics.dev/local-development) for more details.
+
 ## Contributing
 
 Issues, feature suggestions, and pull requests are very welcome!
