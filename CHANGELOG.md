@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 - Make logging less verbose, and introduce a `--verbose` flag to verbose logging (#62)
+- Use host and port for job name in Prometheus target list (#66)
 
 ## [0.1.0]
 
