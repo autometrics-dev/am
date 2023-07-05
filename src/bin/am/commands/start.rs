@@ -50,7 +50,7 @@ pub struct Arguments {
     metrics_endpoints: Vec<Url>,
 
     /// The Prometheus version to use.
-    #[clap(long, env, default_value = "v2.44.0")]
+    #[clap(long, env, default_value = "v2.45.0")]
     prometheus_version: String,
 
     /// The listen address for the web server of am.
