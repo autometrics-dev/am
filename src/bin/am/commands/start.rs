@@ -507,7 +507,7 @@ async fn start_web_server(listen_address: &SocketAddr, args: Arguments) -> Resul
             .map(|endpoint| endpoint.to_string())
             .collect::<Vec<String>>()
             .join(", ");
-        info!("Now sampling the following {endpoints} for metrics");
+        info!("Now sampling the following endpoints for metrics: {endpoints}");
     }
 
     // TODO: Add support for graceful shutdown
