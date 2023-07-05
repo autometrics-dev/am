@@ -18,7 +18,6 @@ use std::fs::File;
 use std::io::{Seek, SeekFrom};
 use std::net::SocketAddr;
 use std::path::Path;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 use std::vec;
 use tempfile::NamedTempFile;
@@ -374,11 +373,8 @@ fn to_scrape_config(metric_endpoint: &Url) -> prometheus::ScrapeConfig {
         None => metric_endpoint.host_str().unwrap().to_string(),
     };
 
-    static COUNTER: AtomicUsize = AtomicUsize::new(0);
-    let num = COUNTER.fetch_add(1, Ordering::SeqCst);
-
     prometheus::ScrapeConfig {
-        job_name: format!("app_{num}"),
+        job_name: host.clone(),
         static_configs: vec![prometheus::StaticScrapeConfig {
             targets: vec![host],
         }],
