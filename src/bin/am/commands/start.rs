@@ -1,3 +1,4 @@
+use crate::dir::AutoCleanupDir;
 use crate::downloader::{download_github_release, unpack, verify_checksum};
 use crate::interactive;
 use anyhow::{bail, Context, Result};
@@ -19,7 +20,7 @@ use std::io::{Seek, SeekFrom};
 use std::net::SocketAddr;
 use std::path::Path;
 use std::time::Duration;
-use std::vec;
+use std::{env, vec};
 use tempfile::NamedTempFile;
 use tokio::{process, select};
 use tracing::{debug, error, info, trace, warn};
@@ -76,6 +77,10 @@ pub struct Arguments {
     /// The pushgateway version to use.
     #[clap(long, env, default_value = "v1.6.0")]
     pushgateway_version: String,
+
+    /// Whenever to clean up files created by Prometheus/Pushgateway after successful execution
+    #[clap(short = 'p', long, env)]
+    ephemeral: bool,
 }
 
 pub async fn handle_command(mut args: Arguments, mp: MultiProgress) -> Result<()> {
@@ -136,7 +141,7 @@ pub async fn handle_command(mut args: Arguments, mp: MultiProgress) -> Result<()
         }
 
         let prometheus_config = generate_prom_config(prometheus_args.metrics_endpoints)?;
-        start_prometheus(&prometheus_path, &prometheus_config).await
+        start_prometheus(&prometheus_path, &prometheus_config, args.ephemeral).await
     };
 
     let pushgateway_task = if args.enable_pushgateway {
@@ -165,7 +170,7 @@ pub async fn handle_command(mut args: Arguments, mp: MultiProgress) -> Result<()
                 debug!("Found pushgateway in: {:?}", &pushgateway_path);
             }
 
-            start_pushgateway(&pushgateway_path).await
+            start_pushgateway(&pushgateway_path, args.ephemeral).await
         }
         .boxed()
     } else {
@@ -403,9 +408,10 @@ async fn check_endpoint(url: &Url) -> Result<()> {
 async fn start_prometheus(
     prometheus_path: &Path,
     prometheus_config: &prometheus::Config,
+    ephemeral: bool,
 ) -> Result<()> {
     // First write the config to a temp file
-    let config_file_path = std::env::temp_dir().join("prometheus.yml");
+    let config_file_path = env::temp_dir().join("prometheus.yml");
     let config_file = File::create(&config_file_path)?;
 
     debug!(
@@ -417,7 +423,8 @@ async fn start_prometheus(
 
     // TODO: Capture prometheus output into a internal buffer and expose it
     // through an api.
-    // TODO: Change the working directory, maybe make it configurable?
+
+    let work_dir = AutoCleanupDir::new("prometheus", ephemeral)?;
 
     #[cfg(not(target_os = "windows"))]
     let program = "prometheus";
@@ -436,6 +443,7 @@ async fn start_prometheus(
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
+        .current_dir(&work_dir)
         .spawn()
         .context("Unable to start Prometheus")?;
 
@@ -450,7 +458,9 @@ async fn start_prometheus(
 
 /// Start a prometheus process. This will block until the Prometheus process
 /// stops.
-async fn start_pushgateway(pushgateway_path: &Path) -> Result<()> {
+async fn start_pushgateway(pushgateway_path: &Path, ephemeral: bool) -> Result<()> {
+    let work_dir = AutoCleanupDir::new("pushgateway", ephemeral)?;
+
     info!("Starting Pushgateway");
     let mut child = process::Command::new(pushgateway_path.join("pushgateway"))
         .arg("--web.listen-address=:9091")
@@ -458,12 +468,14 @@ async fn start_pushgateway(pushgateway_path: &Path) -> Result<()> {
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
+        .current_dir(&work_dir)
         .spawn()
         .context("Unable to start Pushgateway")?;
 
     let status = child.wait().await?;
+
     if !status.success() {
-        anyhow::bail!("Pushgateway exited with status {}", status)
+        bail!("Pushgateway exited with status {}", status)
     }
 
     Ok(())
