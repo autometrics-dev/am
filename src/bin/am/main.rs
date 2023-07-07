@@ -10,6 +10,7 @@ use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{EnvFilter, Layer, Registry};
 
 mod commands;
+mod dir;
 mod downloader;
 mod interactive;
 

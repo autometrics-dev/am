@@ -1,3 +1,4 @@
+use crate::dir::AutoCleanupDir;
 use crate::downloader::{download_github_release, unpack, verify_checksum};
 use crate::interactive;
 use anyhow::{bail, Context, Result};
@@ -19,7 +20,7 @@ use std::io::{Seek, SeekFrom};
 use std::net::SocketAddr;
 use std::path::Path;
 use std::time::Duration;
-use std::{env, fs, vec};
+use std::{env, vec};
 use tempfile::NamedTempFile;
 use tokio::{process, select};
 use tracing::{debug, error, info, trace, warn};
@@ -423,7 +424,7 @@ async fn start_prometheus(
     // TODO: Capture prometheus output into a internal buffer and expose it
     // through an api.
 
-    let work_dir = env::current_dir()?.join(".autometrics").join("prometheus");
+    let work_dir = AutoCleanupDir::new("prometheus", ephemeral)?;
 
     #[cfg(not(target_os = "windows"))]
     let program = "prometheus";
@@ -448,10 +449,6 @@ async fn start_prometheus(
 
     let status = child.wait().await?;
 
-    if ephemeral {
-        fs::remove_dir_all(work_dir)?;
-    }
-
     if !status.success() {
         bail!("Prometheus exited with status {}", status)
     }
@@ -462,7 +459,7 @@ async fn start_prometheus(
 /// Start a prometheus process. This will block until the Prometheus process
 /// stops.
 async fn start_pushgateway(pushgateway_path: &Path, ephemeral: bool) -> Result<()> {
-    let work_dir = env::current_dir()?.join(".autometrics").join("pushgateway");
+    let work_dir = AutoCleanupDir::new("pushgateway", ephemeral)?;
 
     info!("Starting Pushgateway");
     let mut child = process::Command::new(pushgateway_path.join("pushgateway"))
@@ -479,10 +476,6 @@ async fn start_pushgateway(pushgateway_path: &Path, ephemeral: bool) -> Result<(
 
     if !status.success() {
         bail!("Pushgateway exited with status {}", status)
-    }
-
-    if ephemeral {
-        fs::remove_dir_all(work_dir)?;
     }
 
     Ok(())
