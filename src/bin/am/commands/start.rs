@@ -78,7 +78,7 @@ pub struct Arguments {
     pushgateway_version: String,
 
     /// Whenever to clean up files created by Prometheus/Pushgateway after successful execution
-    #[clap(short, long, env)]
+    #[clap(short = 'p', long, env)]
     ephemeral: bool,
 }
 
@@ -439,9 +439,9 @@ async fn start_prometheus(
         .arg("--web.listen-address=:9090")
         .arg("--web.enable-lifecycle")
         .arg("--web.external-url=http://localhost:6789/prometheus") // TODO: Make sure this matches with that is actually running.
-        .stdin(process::Stdio::null())
-        .stdout(process::Stdio::null())
-        .stderr(process::Stdio::null())
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
         .current_dir(&work_dir)
         .spawn()
         .context("Unable to start Prometheus")?;
@@ -468,9 +468,9 @@ async fn start_pushgateway(pushgateway_path: &Path, ephemeral: bool) -> Result<(
     let mut child = process::Command::new(pushgateway_path.join("pushgateway"))
         .arg("--web.listen-address=:9091")
         .arg("--web.external-url=http://localhost:6789/pushgateway") // TODO: Make sure this matches with that is actually running.
-        .stdin(process::Stdio::null())
-        .stdout(process::Stdio::null())
-        .stderr(process::Stdio::null())
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
         .current_dir(&work_dir)
         .spawn()
         .context("Unable to start Pushgateway")?;
