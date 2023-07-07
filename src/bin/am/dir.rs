@@ -1,6 +1,5 @@
 use anyhow::Result;
-use std::env;
-use std::fs::remove_dir_all;
+use std::{env, fs};
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use tracing::warn;
@@ -18,8 +17,11 @@ impl AutoCleanupDir {
             env::current_dir()?
         };
 
+        let path = start_dir.join(".autometrics").join(process);
+        fs::create_dir_all(&path)?;
+
         Ok(AutoCleanupDir {
-            path: start_dir.join(".autometrics").join(process),
+            path,
             ephemeral,
         })
     }
@@ -28,7 +30,7 @@ impl AutoCleanupDir {
 impl Drop for AutoCleanupDir {
     fn drop(&mut self) {
         if self.ephemeral {
-            if let Err(err) = remove_dir_all(&self) {
+            if let Err(err) = fs::remove_dir_all(&self) {
                 warn!(
                     ?err,
                     "failed to remove data directory despite --ephemeral being passed"

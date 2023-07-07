@@ -79,7 +79,7 @@ pub struct Arguments {
     pushgateway_version: String,
 
     /// Whenever to clean up files created by Prometheus/Pushgateway after successful execution
-    #[clap(short = 'p', long, env)]
+    #[clap(short = 'd', long, env)]
     ephemeral: bool,
 }
 
