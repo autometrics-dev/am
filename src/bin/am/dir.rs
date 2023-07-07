@@ -1,7 +1,7 @@
 use anyhow::Result;
-use std::{env, fs};
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
+use std::{env, fs};
 use tracing::warn;
 
 pub struct AutoCleanupDir {
@@ -20,10 +20,7 @@ impl AutoCleanupDir {
         let path = start_dir.join(".autometrics").join(process);
         fs::create_dir_all(&path)?;
 
-        Ok(AutoCleanupDir {
-            path,
-            ephemeral,
-        })
+        Ok(AutoCleanupDir { path, ephemeral })
     }
 }
 
