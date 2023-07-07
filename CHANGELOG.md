@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Make logging less verbose, and introduce a `--verbose` flag to verbose logging (#62)
 - Use host and port for job name in Prometheus target list (#66)
+- Prometheus/Pushgateway data directory no longer defaults to current working directory (#76)
+- `--ephemeral` can now be specified to automatically delete data created by
+  Prometheus/Pushgateway after the process exits (#76)
 
 ## [0.1.0]
 
