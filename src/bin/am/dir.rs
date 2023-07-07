@@ -5,7 +5,6 @@ use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use tracing::warn;
 
-#[repr(transparent)]
 pub struct AutoCleanupDir {
     path: PathBuf,
     ephemeral: bool,
@@ -21,7 +20,7 @@ impl AutoCleanupDir {
 
         Ok(AutoCleanupDir {
             path: start_dir.join(".autometrics").join(process),
-            ephemeral
+            ephemeral,
         })
     }
 }
@@ -29,8 +28,11 @@ impl AutoCleanupDir {
 impl Drop for AutoCleanupDir {
     fn drop(&mut self) {
         if self.ephemeral {
-            if let Err(err) = remove_dir_all(&self.0) {
-                warn!(?err, "failed to remove data directory despite --ephemeral being passed");
+            if let Err(err) = remove_dir_all(&self) {
+                warn!(
+                    ?err,
+                    "failed to remove data directory despite --ephemeral being passed"
+                );
             }
         }
     }
@@ -40,12 +42,12 @@ impl Deref for AutoCleanupDir {
     type Target = PathBuf;
 
     fn deref(&self) -> &Self::Target {
-        &self.0
+        &self.path
     }
 }
 
 impl AsRef<Path> for AutoCleanupDir {
     fn as_ref(&self) -> &Path {
-        self.0.as_path()
+        self.path.as_path()
     }
 }
