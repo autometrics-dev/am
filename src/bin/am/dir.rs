@@ -50,3 +50,18 @@ impl AsRef<Path> for AutoCleanupDir {
         self.path.as_path()
     }
 }
+
+#[test]
+fn test_temp_dir() {
+    let path;
+
+    {
+        let dir = AutoCleanupDir::new("unit_test", true).unwrap();
+
+        path = dir.path.clone();
+        assert!(dir.path.exists());
+    }
+
+    // `dir` gets dropped right at `}` above, so it shouldn't exist anymore on fs as well
+    assert!(!path.exists());
+}
