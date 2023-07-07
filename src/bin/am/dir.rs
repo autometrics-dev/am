@@ -6,7 +6,10 @@ use std::path::{Path, PathBuf};
 use tracing::warn;
 
 #[repr(transparent)]
-pub struct AutoCleanupDir(PathBuf);
+pub struct AutoCleanupDir {
+    path: PathBuf,
+    ephemeral: bool,
+}
 
 impl AutoCleanupDir {
     pub(crate) fn new(process: &str, ephemeral: bool) -> Result<AutoCleanupDir> {
@@ -16,14 +19,19 @@ impl AutoCleanupDir {
             env::current_dir()?
         };
 
-        Ok(AutoCleanupDir(start_dir.join(".autometrics").join(process)))
+        Ok(AutoCleanupDir {
+            path: start_dir.join(".autometrics").join(process),
+            ephemeral
+        })
     }
 }
 
 impl Drop for AutoCleanupDir {
     fn drop(&mut self) {
-        if let Err(err) = remove_dir_all(&self.0) {
-            warn!(?err, "failed to remove data directory despite");
+        if self.ephemeral {
+            if let Err(err) = remove_dir_all(&self.0) {
+                warn!(?err, "failed to remove data directory despite --ephemeral being passed");
+            }
         }
     }
 }
