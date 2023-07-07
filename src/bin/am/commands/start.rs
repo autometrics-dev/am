@@ -19,7 +19,7 @@ use std::io::{Seek, SeekFrom};
 use std::net::SocketAddr;
 use std::path::Path;
 use std::time::Duration;
-use std::vec;
+use std::{env, fs, vec};
 use tempfile::NamedTempFile;
 use tokio::{process, select};
 use tracing::{debug, error, info, trace, warn};
@@ -76,6 +76,10 @@ pub struct Arguments {
     /// The pushgateway version to use.
     #[clap(long, env, default_value = "v1.6.0")]
     pushgateway_version: String,
+
+    /// Whenever to clean up files created by Prometheus/Pushgateway after successful execution
+    #[clap(short, long, env)]
+    ephemeral: bool,
 }
 
 pub async fn handle_command(mut args: Arguments, mp: MultiProgress) -> Result<()> {
@@ -136,7 +140,7 @@ pub async fn handle_command(mut args: Arguments, mp: MultiProgress) -> Result<()
         }
 
         let prometheus_config = generate_prom_config(prometheus_args.metrics_endpoints)?;
-        start_prometheus(&prometheus_path, &prometheus_config).await
+        start_prometheus(&prometheus_path, &prometheus_config, args.ephemeral).await
     };
 
     let pushgateway_task = if args.enable_pushgateway {
@@ -165,7 +169,7 @@ pub async fn handle_command(mut args: Arguments, mp: MultiProgress) -> Result<()
                 debug!("Found pushgateway in: {:?}", &pushgateway_path);
             }
 
-            start_pushgateway(&pushgateway_path).await
+            start_pushgateway(&pushgateway_path, args.ephemeral).await
         }
         .boxed()
     } else {
@@ -403,9 +407,10 @@ async fn check_endpoint(url: &Url) -> Result<()> {
 async fn start_prometheus(
     prometheus_path: &Path,
     prometheus_config: &prometheus::Config,
+    ephemeral: bool,
 ) -> Result<()> {
     // First write the config to a temp file
-    let config_file_path = std::env::temp_dir().join("prometheus.yml");
+    let config_file_path = env::temp_dir().join("prometheus.yml");
     let config_file = File::create(&config_file_path)?;
 
     debug!(
@@ -417,7 +422,8 @@ async fn start_prometheus(
 
     // TODO: Capture prometheus output into a internal buffer and expose it
     // through an api.
-    // TODO: Change the working directory, maybe make it configurable?
+
+    let work_dir = env::current_dir()?.join(".autometrics").join("prometheus");
 
     #[cfg(not(target_os = "windows"))]
     let program = "prometheus";
@@ -433,13 +439,18 @@ async fn start_prometheus(
         .arg("--web.listen-address=:9090")
         .arg("--web.enable-lifecycle")
         .arg("--web.external-url=http://localhost:6789/prometheus") // TODO: Make sure this matches with that is actually running.
-        .stdin(std::process::Stdio::null())
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
+        .stdin(process::Stdio::null())
+        .stdout(process::Stdio::null())
+        .stderr(process::Stdio::null())
+        .current_dir(&work_dir)
         .spawn()
         .context("Unable to start Prometheus")?;
 
     let status = child.wait().await?;
+
+    if ephemeral {
+        fs::remove_dir_all(work_dir)?;
+    }
 
     if !status.success() {
         bail!("Prometheus exited with status {}", status)
@@ -450,20 +461,28 @@ async fn start_prometheus(
 
 /// Start a prometheus process. This will block until the Prometheus process
 /// stops.
-async fn start_pushgateway(pushgateway_path: &Path) -> Result<()> {
+async fn start_pushgateway(pushgateway_path: &Path, ephemeral: bool) -> Result<()> {
+    let work_dir = env::current_dir()?.join(".autometrics").join("pushgateway");
+
     info!("Starting Pushgateway");
     let mut child = process::Command::new(pushgateway_path.join("pushgateway"))
         .arg("--web.listen-address=:9091")
         .arg("--web.external-url=http://localhost:6789/pushgateway") // TODO: Make sure this matches with that is actually running.
-        .stdin(std::process::Stdio::null())
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
+        .stdin(process::Stdio::null())
+        .stdout(process::Stdio::null())
+        .stderr(process::Stdio::null())
+        .current_dir(&work_dir)
         .spawn()
         .context("Unable to start Pushgateway")?;
 
     let status = child.wait().await?;
+
     if !status.success() {
-        anyhow::bail!("Pushgateway exited with status {}", status)
+        bail!("Pushgateway exited with status {}", status)
+    }
+
+    if ephemeral {
+        fs::remove_dir_all(work_dir)?;
     }
 
     Ok(())
