@@ -1,6 +1,7 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use indicatif::MultiProgress;
+use tracing::info;
 
 pub mod start;
 pub mod system;
@@ -44,7 +45,15 @@ pub async fn handle_command(app: Application, mp: MultiProgress) -> Result<()> {
     match app.command {
         SubCommands::Start(args) => start::handle_command(args, mp).await,
         SubCommands::System(args) => system::handle_command(args, mp).await,
-        SubCommands::Discord => Ok(open::that("https://discord.gg/kHtwcH8As9")?),
+        SubCommands::Discord => {
+            const URL: &str = "https://discord.gg/kHtwcH8As9";
+
+            if open::that(URL).is_err() {
+                info!("Unable to open browser, open the following URL in your browser: {URL}");
+            }
+
+            Ok(())
+        }
         SubCommands::MarkdownHelp => {
             clap_markdown::print_help_markdown::<Application>();
             Ok(())
