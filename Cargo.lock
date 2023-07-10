@@ -104,6 +104,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "axum",
+ "bytes",
  "clap",
  "clap-markdown",
  "dialoguer",

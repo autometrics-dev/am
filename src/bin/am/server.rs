@@ -28,6 +28,7 @@ pub(crate) async fn start_web_server(
 
     if enable_pushgateway {
         app = app
+            .route("/metrics", any(pushgateway::metrics_proxy_handler))
             .route("/pushgateway/*path", any(pushgateway::handler))
             .route("/pushgateway", any(pushgateway::handler));
     }
