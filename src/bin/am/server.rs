@@ -21,7 +21,7 @@ pub(crate) async fn start_web_server(
             "/explorer",
             get(|| async { Redirect::permanent("/explorer/") }),
         )
-        .route("/explorer/", get(explorer::root_handler))
+        .route("/explorer/", get(explorer::handler))
         .route("/explorer/*path", get(explorer::handler))
         .route("/prometheus/*path", any(prometheus::handler))
         .route("/prometheus", any(prometheus::handler));
