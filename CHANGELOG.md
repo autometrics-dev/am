@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `--ephemeral` can now be specified to automatically delete data created by
   Prometheus/Pushgateway after the process exits (#76)
 - Added new subcommand `discord` which links to the discord server (#80)
+- The `/metrics` endpoint now transparently redirects to `/pushgateway/metrics` if
+  Pushgateway is enabled (#81)
 
 ## [0.1.0]
 
