@@ -1,7 +1,9 @@
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
+use autometrics_am::config::AmConfig;
 use clap::Parser;
 use commands::{handle_command, Application};
 use interactive::IndicatifWriter;
+use std::path::PathBuf;
 use tracing::level_filters::LevelFilter;
 use tracing::{debug, error};
 use tracing_subscriber::fmt::format;
@@ -25,7 +27,15 @@ async fn main() {
         std::process::exit(1);
     }
 
-    let result = handle_command(app, multi_progress).await;
+    let config = match load_config(app.config_file.clone()).await {
+        Ok(config) => config,
+        Err(err) => {
+            error!("Unable to load config: {:?}", err);
+            std::process::exit(1);
+        }
+    };
+
+    let result = handle_command(app, config, multi_progress).await;
     match result {
         Ok(_) => debug!("Command completed successfully"),
         Err(err) => {
@@ -84,4 +94,33 @@ fn init_logging(app: &Application, writer: IndicatifWriter) -> Result<()> {
         .context("unable to initialize logger")?;
 
     Ok(())
+}
+
+/// Try to load the config from the specified path. If the file doesn't exist it
+/// will return a AmConfig with all its defaults set. If it is invalid toml file
+/// it will return an error.
+async fn load_config(config_file: Option<PathBuf>) -> Result<AmConfig> {
+    let (path, is_default) = match config_file {
+        Some(path) => (path, false),
+        None => (PathBuf::from("./am.toml"), true),
+    };
+
+    debug!(?path, "Loading config");
+
+    match tokio::fs::read_to_string(path).await {
+        Ok(contents) => {
+            debug!("Found config file, parsing");
+            let config =
+                toml::from_str(&contents).context("config file contains invalid toml contents")?;
+            Ok(config)
+        }
+        Err(err) => {
+            if !is_default {
+                debug!(?err, "No config file found, using defaults");
+                Ok(AmConfig::default())
+            } else {
+                bail!("Unable to read config file: {}", err);
+            }
+        }
+    }
 }

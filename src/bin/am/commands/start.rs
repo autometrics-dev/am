@@ -3,6 +3,7 @@ use crate::downloader::{download_github_release, unpack, verify_checksum};
 use crate::interactive;
 use crate::server::start_web_server;
 use anyhow::{bail, Context, Result};
+use autometrics_am::config::AmConfig;
 use autometrics_am::prometheus;
 use clap::Parser;
 use directories::ProjectDirs;
@@ -13,6 +14,7 @@ use std::fs::File;
 use std::io::{Seek, SeekFrom};
 use std::net::SocketAddr;
 use std::path::Path;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 use std::{env, vec};
 use tempfile::NamedTempFile;
@@ -31,7 +33,7 @@ pub(crate) static CLIENT: Lazy<reqwest::Client> = Lazy::new(|| {
 });
 
 #[derive(Parser, Clone)]
-pub struct Arguments {
+pub struct CliArguments {
     /// The endpoint(s) that Prometheus will scrape.
     ///
     /// Multiple endpoints can be specified by separating them with a space.
@@ -66,7 +68,7 @@ pub struct Arguments {
     /// either cause they are short-lived (like functions), or Prometheus cannot
     /// reach them (like client-side applications).
     #[clap(short, long, env)]
-    enable_pushgateway: bool,
+    pushgateway_enabled: Option<bool>,
 
     /// The pushgateway version to use.
     #[clap(long, env, default_value = "v1.6.0")]
@@ -77,10 +79,116 @@ pub struct Arguments {
     ephemeral: bool,
 }
 
-pub async fn handle_command(mut args: Arguments, mp: MultiProgress) -> Result<()> {
-    if args.metrics_endpoints.is_empty() && args.enable_pushgateway {
-        let endpoint = interactive::user_input("Endpoint")?;
-        args.metrics_endpoints.push(endpoint_parser(&endpoint)?);
+#[derive(Debug, Clone)]
+struct Arguments {
+    metrics_endpoints: Vec<Endpoint>,
+    prometheus_version: String,
+    listen_address: SocketAddr,
+    pushgateway_enabled: bool,
+    pushgateway_version: String,
+    ephemeral_working_directory: bool,
+}
+
+impl Arguments {
+    fn new(args: CliArguments, config: AmConfig) -> Self {
+        static COUNTER: AtomicUsize = AtomicUsize::new(0);
+
+        // If the user specified an endpoint using args, then use those.
+        // Otherwise use the endpoint configured in the config file. And
+        // fallback to an empty list if neither are configured.
+        let metrics_endpoints = if !args.metrics_endpoints.is_empty() {
+            args.metrics_endpoints
+                .into_iter()
+                .map(|url| {
+                    let num = COUNTER.fetch_add(1, Ordering::SeqCst);
+                    Endpoint::new(url, format!("am_{num}"))
+                })
+                .collect()
+        } else if let Some(endpoints) = config.endpoints {
+            endpoints
+                .into_iter()
+                .map(|endpoint| {
+                    let job_name = endpoint.job_name.unwrap_or_else(|| {
+                        format!("am_{num}", num = COUNTER.fetch_add(1, Ordering::SeqCst))
+                    });
+                    Endpoint::new(endpoint.url, job_name)
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
+
+        Arguments {
+            metrics_endpoints,
+            prometheus_version: args.prometheus_version,
+            listen_address: args.listen_address,
+            pushgateway_enabled: args
+                .pushgateway_enabled
+                .or(config.pushgateway_enabled)
+                .unwrap_or(false),
+            pushgateway_version: args.pushgateway_version,
+            ephemeral_working_directory: args.ephemeral,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+struct Endpoint {
+    pub url: url::Url,
+    pub job_name: String,
+}
+
+impl Endpoint {
+    fn new(url: url::Url, job_name: String) -> Self {
+        Self { url, job_name }
+    }
+}
+
+impl From<Endpoint> for prometheus::ScrapeConfig {
+    /// Convert an InnerEndpoint to a Prometheus ScrapeConfig.
+    ///
+    /// Scrape config only supports http and https atm.
+    fn from(endpoint: Endpoint) -> Self {
+        let scheme = match endpoint.url.scheme() {
+            "http" => Some(prometheus::Scheme::Http),
+            "https" => Some(prometheus::Scheme::Https),
+            _ => None,
+        };
+
+        let mut metrics_path = endpoint.url.path();
+        if metrics_path.is_empty() {
+            metrics_path = "/metrics";
+        }
+
+        let host = match endpoint.url.port() {
+            Some(port) => format!("{}:{}", endpoint.url.host_str().unwrap(), port),
+            None => endpoint.url.host_str().unwrap().to_string(),
+        };
+
+        prometheus::ScrapeConfig {
+            job_name: endpoint.job_name,
+            static_configs: vec![prometheus::StaticScrapeConfig {
+                targets: vec![host],
+            }],
+            metrics_path: Some(metrics_path.to_string()),
+            scheme,
+        }
+    }
+}
+
+pub async fn handle_command(args: CliArguments, config: AmConfig, mp: MultiProgress) -> Result<()> {
+    let mut args = Arguments::new(args, config);
+
+    if args.metrics_endpoints.is_empty() && args.pushgateway_enabled {
+        info!("No metrics endpoints provided and pushgateway is not enabled. Please provide an endpoint.");
+
+        // Ask for a metric endpoint and parse the input like a regular CLI argument
+        let url = interactive::user_input("Metric endpoint")?;
+        let url = endpoint_parser(&url)?;
+
+        // Add the provided URL with the job name am_0
+        let endpoint = Endpoint::new(url, "am_0".to_string());
+        args.metrics_endpoints.push(endpoint);
     }
 
     // First let's retrieve the directory for our application to store data in.
@@ -97,15 +205,19 @@ pub async fn handle_command(mut args: Arguments, mp: MultiProgress) -> Result<()
 
         // check if the provided endpoint works
         for endpoint in &args.metrics_endpoints {
-            if let Err(err) = check_endpoint(endpoint).await {
-                warn!(?endpoint, "Failed to contact endpoint: {err:?}");
+            if let Err(err) = check_endpoint(&endpoint.url).await {
+                warn!(
+                    ?err,
+                    "Failed to make request to {} (job {})", endpoint.url, endpoint.job_name
+                );
             }
         }
     }
 
-    if args.enable_pushgateway {
-        args.metrics_endpoints
-            .push(Url::parse("http://localhost:9091/pushgateway/metrics").unwrap());
+    if args.pushgateway_enabled {
+        let url = Url::parse("http://localhost:9091/pushgateway/metrics").unwrap();
+        let endpoint = Endpoint::new(url, "am_pushgateway".to_string());
+        args.metrics_endpoints.push(endpoint);
     }
 
     // Start Prometheus server
@@ -135,10 +247,15 @@ pub async fn handle_command(mut args: Arguments, mp: MultiProgress) -> Result<()
         }
 
         let prometheus_config = generate_prom_config(prometheus_args.metrics_endpoints)?;
-        start_prometheus(&prometheus_path, &prometheus_config, args.ephemeral).await
+        start_prometheus(
+            &prometheus_path,
+            &prometheus_config,
+            args.ephemeral_working_directory,
+        )
+        .await
     };
 
-    let pushgateway_task = if args.enable_pushgateway {
+    let pushgateway_task = if args.pushgateway_enabled {
         let pushgateway_args = args.clone();
         let pushgateway_local_data = local_data.clone();
         let pushgateway_multi_progress = mp.clone();
@@ -164,7 +281,7 @@ pub async fn handle_command(mut args: Arguments, mp: MultiProgress) -> Result<()
                 debug!("Found pushgateway in: {:?}", &pushgateway_path);
             }
 
-            start_pushgateway(&pushgateway_path, args.ephemeral).await
+            start_pushgateway(&pushgateway_path, args.ephemeral_working_directory).await
         }
         .boxed()
     } else {
@@ -175,7 +292,7 @@ pub async fn handle_command(mut args: Arguments, mp: MultiProgress) -> Result<()
         let endpoints = args
             .metrics_endpoints
             .iter()
-            .map(|endpoint| endpoint.to_string())
+            .map(|endpoint| endpoint.url.to_string())
             .collect::<Vec<String>>()
             .join(", ");
         info!("Now sampling the following endpoints for metrics: {endpoints}");
@@ -183,7 +300,8 @@ pub async fn handle_command(mut args: Arguments, mp: MultiProgress) -> Result<()
 
     // Start web server for hosting the explorer, am api and proxies to the enabled services.
     let listen_address = args.listen_address;
-    let web_server_task = start_web_server(&listen_address, args.enable_pushgateway);
+    let web_server_task =
+        async move { start_web_server(&listen_address, args.pushgateway_enabled).await };
 
     select! {
         biased;
@@ -348,8 +466,8 @@ fn determine_os_and_arch() -> Result<(&'static str, &'static str)> {
 ///
 /// For now this will expand a simple template and only has support for a single
 /// endpoint.
-fn generate_prom_config(metric_endpoints: Vec<Url>) -> Result<prometheus::Config> {
-    let scrape_configs = metric_endpoints.iter().map(to_scrape_config).collect();
+fn generate_prom_config(metric_endpoints: Vec<Endpoint>) -> Result<prometheus::Config> {
+    let scrape_configs = metric_endpoints.into_iter().map(Into::into).collect();
 
     let config = prometheus::Config {
         global: prometheus::GlobalConfig {
@@ -360,36 +478,6 @@ fn generate_prom_config(metric_endpoints: Vec<Url>) -> Result<prometheus::Config
     };
 
     Ok(config)
-}
-
-/// Convert an URL to a metric endpoint.
-///
-/// Scrape config only supports http and https atm.
-fn to_scrape_config(metric_endpoint: &Url) -> prometheus::ScrapeConfig {
-    let scheme = match metric_endpoint.scheme() {
-        "http" => Some(prometheus::Scheme::Http),
-        "https" => Some(prometheus::Scheme::Https),
-        _ => None,
-    };
-
-    let mut metrics_path = metric_endpoint.path();
-    if metrics_path.is_empty() {
-        metrics_path = "/metrics";
-    }
-
-    let host = match metric_endpoint.port() {
-        Some(port) => format!("{}:{}", metric_endpoint.host_str().unwrap(), port),
-        None => metric_endpoint.host_str().unwrap().to_string(),
-    };
-
-    prometheus::ScrapeConfig {
-        job_name: host.clone(),
-        static_configs: vec![prometheus::StaticScrapeConfig {
-            targets: vec![host],
-        }],
-        metrics_path: Some(metrics_path.to_string()),
-        scheme,
-    }
 }
 
 /// Checks whenever the endpoint works
