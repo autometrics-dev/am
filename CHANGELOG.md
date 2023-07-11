@@ -17,6 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Pushgateway is enabled (#81)
 - Allow using a config file (am.toml) to set some defaults such as endpoints or
   if pushgateway is enabled (#67)
+- `honor_labels` will not be set to `true` in the generated Prometheus config
+  if Pushgateway is enabled (#69)
 
 ## [0.1.0]
 
