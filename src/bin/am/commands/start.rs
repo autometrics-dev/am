@@ -134,44 +134,43 @@ impl Arguments {
 
 #[derive(Debug, Clone)]
 struct Endpoint {
-    pub url: url::Url,
-    pub job_name: String,
+    url: Url,
+    job_name: String,
 }
 
 impl Endpoint {
-    fn new(url: url::Url, job_name: String) -> Self {
+    fn new(url: Url, job_name: String) -> Self {
         Self { url, job_name }
     }
-}
 
-impl From<Endpoint> for prometheus::ScrapeConfig {
     /// Convert an InnerEndpoint to a Prometheus ScrapeConfig.
     ///
     /// Scrape config only supports http and https atm.
-    fn from(endpoint: Endpoint) -> Self {
-        let scheme = match endpoint.url.scheme() {
+    fn into_scrape_config(self, pushgateway_enabled: bool) -> prometheus::ScrapeConfig {
+        let scheme = match self.url.scheme() {
             "http" => Some(prometheus::Scheme::Http),
             "https" => Some(prometheus::Scheme::Https),
             _ => None,
         };
 
-        let mut metrics_path = endpoint.url.path();
+        let mut metrics_path = self.url.path();
         if metrics_path.is_empty() {
             metrics_path = "/metrics";
         }
 
-        let host = match endpoint.url.port() {
-            Some(port) => format!("{}:{}", endpoint.url.host_str().unwrap(), port),
-            None => endpoint.url.host_str().unwrap().to_string(),
+        let host = match self.url.port() {
+            Some(port) => format!("{}:{}", self.url.host_str().unwrap(), port),
+            None => self.url.host_str().unwrap().to_string(),
         };
 
         prometheus::ScrapeConfig {
-            job_name: endpoint.job_name,
+            job_name: self.job_name,
             static_configs: vec![prometheus::StaticScrapeConfig {
                 targets: vec![host],
             }],
             metrics_path: Some(metrics_path.to_string()),
             scheme,
+            honor_labels: Some(pushgateway_enabled),
         }
     }
 }
@@ -246,7 +245,9 @@ pub async fn handle_command(args: CliArguments, config: AmConfig, mp: MultiProgr
             debug!("Found prometheus in: {:?}", prometheus_path);
         }
 
-        let prometheus_config = generate_prom_config(prometheus_args.metrics_endpoints)?;
+        let prometheus_config =
+            generate_prom_config(prometheus_args.metrics_endpoints, args.pushgateway_enabled)?;
+
         start_prometheus(
             &prometheus_path,
             &prometheus_config,
@@ -466,8 +467,14 @@ fn determine_os_and_arch() -> Result<(&'static str, &'static str)> {
 ///
 /// For now this will expand a simple template and only has support for a single
 /// endpoint.
-fn generate_prom_config(metric_endpoints: Vec<Endpoint>) -> Result<prometheus::Config> {
-    let scrape_configs = metric_endpoints.into_iter().map(Into::into).collect();
+fn generate_prom_config(
+    metric_endpoints: Vec<Endpoint>,
+    pushgateway_enabled: bool,
+) -> Result<prometheus::Config> {
+    let scrape_configs = metric_endpoints
+        .into_iter()
+        .map(|config| config.into_scrape_config(pushgateway_enabled))
+        .collect();
 
     let config = prometheus::Config {
         global: prometheus::GlobalConfig {

@@ -18,6 +18,7 @@ pub struct ScrapeConfig {
     pub static_configs: Vec<StaticScrapeConfig>,
     pub metrics_path: Option<String>,
     pub scheme: Option<Scheme>,
+    pub honor_labels: Option<bool>,
 }
 
 #[derive(Debug, Serialize)]
