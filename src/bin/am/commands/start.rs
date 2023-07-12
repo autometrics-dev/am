@@ -5,6 +5,7 @@ use crate::server::start_web_server;
 use anyhow::{bail, Context, Result};
 use autometrics_am::config::AmConfig;
 use autometrics_am::prometheus;
+use autometrics_am::prometheus::ScrapeConfig;
 use clap::Parser;
 use directories::ProjectDirs;
 use futures_util::FutureExt;
@@ -101,7 +102,7 @@ impl Arguments {
                 .into_iter()
                 .map(|url| {
                     let num = COUNTER.fetch_add(1, Ordering::SeqCst);
-                    Endpoint::new(url, format!("am_{num}"))
+                    Endpoint::new(url, format!("am_{num}"), false)
                 })
                 .collect()
         } else if let Some(endpoints) = config.endpoints {
@@ -111,7 +112,11 @@ impl Arguments {
                     let job_name = endpoint.job_name.unwrap_or_else(|| {
                         format!("am_{num}", num = COUNTER.fetch_add(1, Ordering::SeqCst))
                     });
-                    Endpoint::new(endpoint.url, job_name)
+                    Endpoint::new(
+                        endpoint.url,
+                        job_name,
+                        endpoint.honor_labels.unwrap_or(false),
+                    )
                 })
                 .collect()
         } else {
@@ -134,17 +139,22 @@ impl Arguments {
 
 #[derive(Debug, Clone)]
 struct Endpoint {
-    pub url: url::Url,
-    pub job_name: String,
+    url: Url,
+    job_name: String,
+    honor_labels: bool,
 }
 
 impl Endpoint {
-    fn new(url: url::Url, job_name: String) -> Self {
-        Self { url, job_name }
+    fn new(url: Url, job_name: String, honor_labels: bool) -> Self {
+        Self {
+            url,
+            job_name,
+            honor_labels,
+        }
     }
 }
 
-impl From<Endpoint> for prometheus::ScrapeConfig {
+impl From<Endpoint> for ScrapeConfig {
     /// Convert an InnerEndpoint to a Prometheus ScrapeConfig.
     ///
     /// Scrape config only supports http and https atm.
@@ -165,13 +175,14 @@ impl From<Endpoint> for prometheus::ScrapeConfig {
             None => endpoint.url.host_str().unwrap().to_string(),
         };
 
-        prometheus::ScrapeConfig {
+        ScrapeConfig {
             job_name: endpoint.job_name,
             static_configs: vec![prometheus::StaticScrapeConfig {
                 targets: vec![host],
             }],
             metrics_path: Some(metrics_path.to_string()),
             scheme,
+            honor_labels: Some(endpoint.honor_labels),
         }
     }
 }
@@ -179,7 +190,7 @@ impl From<Endpoint> for prometheus::ScrapeConfig {
 pub async fn handle_command(args: CliArguments, config: AmConfig, mp: MultiProgress) -> Result<()> {
     let mut args = Arguments::new(args, config);
 
-    if args.metrics_endpoints.is_empty() && args.pushgateway_enabled {
+    if args.metrics_endpoints.is_empty() && !args.pushgateway_enabled {
         info!("No metrics endpoints provided and pushgateway is not enabled. Please provide an endpoint.");
 
         // Ask for a metric endpoint and parse the input like a regular CLI argument
@@ -187,7 +198,7 @@ pub async fn handle_command(args: CliArguments, config: AmConfig, mp: MultiProgr
         let url = endpoint_parser(&url)?;
 
         // Add the provided URL with the job name am_0
-        let endpoint = Endpoint::new(url, "am_0".to_string());
+        let endpoint = Endpoint::new(url, "am_0".to_string(), false);
         args.metrics_endpoints.push(endpoint);
     }
 
@@ -216,7 +227,7 @@ pub async fn handle_command(args: CliArguments, config: AmConfig, mp: MultiProgr
 
     if args.pushgateway_enabled {
         let url = Url::parse("http://localhost:9091/pushgateway/metrics").unwrap();
-        let endpoint = Endpoint::new(url, "am_pushgateway".to_string());
+        let endpoint = Endpoint::new(url, "am_pushgateway".to_string(), true);
         args.metrics_endpoints.push(endpoint);
     }
 
@@ -247,6 +258,7 @@ pub async fn handle_command(args: CliArguments, config: AmConfig, mp: MultiProgr
         }
 
         let prometheus_config = generate_prom_config(prometheus_args.metrics_endpoints)?;
+
         start_prometheus(
             &prometheus_path,
             &prometheus_config,
