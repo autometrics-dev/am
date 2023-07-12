@@ -19,6 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   if pushgateway is enabled (#67)
 - `honor_labels` will now be set to `true` for the Pushgateway endpoint
   in the generated Prometheus config, if it is enabled (#69)
+- Shorthand notion for endpoints defined within the config file (`am.toml`) is now
+  allowed (#85)
 
 ## [0.1.0]
 
