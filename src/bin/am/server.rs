@@ -1,4 +1,5 @@
 use anyhow::{Context, Result};
+use axum::body::Body;
 use axum::response::Redirect;
 use axum::routing::{any, get};
 use axum::{Router, Server};
@@ -20,6 +21,13 @@ pub(crate) async fn start_web_server(
         .route(
             "/explorer",
             get(|| async { Redirect::permanent("/explorer/") }),
+        )
+        .route(
+            "/graph",
+            get(|req: http::Request<Body>| async move {
+                let query = req.uri().query().unwrap_or("");
+                Redirect::temporary(&format!("/explorer/graph.html?{query}"))
+            }),
         )
         .route("/explorer/", get(explorer::handler))
         .route("/explorer/*path", get(explorer::handler))

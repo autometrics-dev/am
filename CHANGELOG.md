@@ -19,6 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   if pushgateway is enabled (#67)
 - `honor_labels` will now be set to `true` for the Pushgateway endpoint
   in the generated Prometheus config, if it is enabled (#69)
+- Redirect `/graph` to `/explorer/graph.html` which will load a different JS
+  script from explorer (#84)
 
 ## [0.1.0]
 
