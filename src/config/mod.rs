@@ -18,6 +18,6 @@ pub struct AmConfig {
 #[serde(rename_all = "kebab-case")]
 pub struct Endpoint {
     pub url: url::Url,
-
     pub job_name: Option<String>,
+    pub honor_labels: Option<bool>,
 }
