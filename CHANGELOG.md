@@ -21,6 +21,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   in the generated Prometheus config, if it is enabled (#69)
 - Redirect `/graph` to `/explorer/graph.html` which will load a different JS
   script from explorer (#84)
+- Shorthand notion for endpoints defined within the config file (`am.toml`) is now
+  allowed (#85)
 
 ## [0.1.0]
 
