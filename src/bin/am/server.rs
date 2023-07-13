@@ -25,7 +25,7 @@ pub(crate) async fn start_web_server(
         .route(
             "/graph",
             get(|req: http::Request<Body>| async move {
-                let query = req.uri().query().unwrap_or("");
+                let query = req.uri().query().unwrap_or_default();
                 Redirect::temporary(&format!("/explorer/graph.html?{query}"))
             }),
         )
