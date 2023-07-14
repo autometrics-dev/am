@@ -64,6 +64,7 @@ pub fn endpoints_from_first_input(args: Vec<Url>, config: Option<Vec<Endpoint>>)
                     url,
                     job_name: Some(format!("am_{num}")),
                     honor_labels: Some(false),
+                    prometheus_scrape_interval: None,
                 }
             })
             .collect()
@@ -79,6 +80,7 @@ pub fn endpoints_from_first_input(args: Vec<Url>, config: Option<Vec<Endpoint>>)
                     url: endpoint.url,
                     job_name: Some(job_name),
                     honor_labels: endpoint.honor_labels,
+                    prometheus_scrape_interval: endpoint.prometheus_scrape_interval,
                 }
             })
             .collect()

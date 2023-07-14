@@ -165,6 +165,7 @@ impl TryFrom<autometrics_am::config::Endpoint> for Endpoint {
                 .job_name
                 .ok_or_else(|| anyhow!("TryFrom requires job_name"))?,
             honor_labels: value.honor_labels.unwrap_or(false),
+            scrape_interval: value.prometheus_scrape_interval,
         })
     }
 }
