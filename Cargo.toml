@@ -23,6 +23,8 @@ flate2 = { version = "1.0.26" }
 futures-util = { version = "0.3.28", features = ["io"] }
 hex = "0.4.3"
 http = { version = "0.2.9" }
+humantime = "2.1.0"
+humantime-serde = "1.1.1"
 include_dir = { version = "0.7.3" }
 indicatif = "0.17.5"
 once_cell = { version = "1.17.1" }
