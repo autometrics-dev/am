@@ -1,8 +1,10 @@
 pushgateway-enabled = true
+# prometheus-scrape-interval = "5m"
 
 [[endpoint]]
-# job-name = "main_app"
+job-name = "main_app"
 url = "http://localhost:3030"
+# scrape-interval = "5s"
 
 [[endpoint]]
 job-name = "secondary_app"

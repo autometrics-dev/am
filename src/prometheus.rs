@@ -1,4 +1,5 @@
 use serde::Serialize;
+use std::time::Duration;
 
 #[derive(Debug, Serialize)]
 pub struct Config {
@@ -8,7 +9,8 @@ pub struct Config {
 
 #[derive(Debug, Serialize)]
 pub struct GlobalConfig {
-    pub scrape_interval: String,
+    #[serde(with = "humantime_serde")]
+    pub scrape_interval: Duration,
     pub evaluation_interval: String,
 }
 
@@ -19,6 +21,13 @@ pub struct ScrapeConfig {
     pub metrics_path: Option<String>,
     pub scheme: Option<Scheme>,
     pub honor_labels: Option<bool>,
+
+    #[serde(
+        default,
+        with = "humantime_serde::option",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub scrape_interval: Option<Duration>,
 }
 
 #[derive(Debug, Serialize)]
