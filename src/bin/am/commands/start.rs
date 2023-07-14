@@ -47,9 +47,21 @@ pub struct CliArguments {
     #[clap(value_parser = endpoint_parser, verbatim_doc_comment)]
     metrics_endpoints: Vec<Url>,
 
-    /// The Prometheus version to use.
-    #[clap(long, env, default_value = "v2.45.0")]
+    /// The Prometheus version to use. It will be downloaded if am has not
+    /// downloaded it already.
+    #[clap(
+        long,
+        env,
+        default_value = "v2.45.0",
+        help_heading = "Prometheus options"
+    )]
     prometheus_version: String,
+
+    /// The default scrape interval for all Prometheus jobs.
+    ///
+    /// This can be overridden on a per endpoint configuration in the am.toml file.
+    #[clap(long, env, help_heading = "Prometheus options", value_parser = humantime::parse_duration)]
+    scrape_interval: Option<Duration>,
 
     /// The listen address for the web server of am.
     ///
@@ -69,11 +81,16 @@ pub struct CliArguments {
     /// Prometheus. This is useful for applications that cannot be scraped,
     /// either cause they are short-lived (like functions), or Prometheus cannot
     /// reach them (like client-side applications).
-    #[clap(short, long, env)]
+    #[clap(short, long, env, help_heading = "Pushgateway options")]
     pushgateway_enabled: Option<bool>,
 
     /// The pushgateway version to use.
-    #[clap(long, env, default_value = "v1.6.0")]
+    #[clap(
+        long,
+        env,
+        default_value = "v1.6.0",
+        help_heading = "Pushgateway options"
+    )]
     pushgateway_version: String,
 
     /// Whenever to clean up files created by Prometheus/Pushgateway after successful execution
@@ -85,6 +102,7 @@ pub struct CliArguments {
 struct Arguments {
     metrics_endpoints: Vec<Endpoint>,
     prometheus_version: String,
+    prometheus_scrape_interval: Duration,
     listen_address: SocketAddr,
     pushgateway_enabled: bool,
     pushgateway_version: String,
@@ -103,7 +121,7 @@ impl Arguments {
                 .into_iter()
                 .map(|url| {
                     let num = COUNTER.fetch_add(1, Ordering::SeqCst);
-                    Endpoint::new(url, format!("am_{num}"), false)
+                    Endpoint::new(url, format!("am_{num}"), false, None)
                 })
                 .collect()
         } else if let Some(endpoints) = config.endpoints {
@@ -117,6 +135,7 @@ impl Arguments {
                         endpoint.url,
                         job_name,
                         endpoint.honor_labels.unwrap_or(false),
+                        endpoint.prometheus_scrape_interval,
                     )
                 })
                 .collect()
@@ -134,6 +153,10 @@ impl Arguments {
                 .unwrap_or(false),
             pushgateway_version: args.pushgateway_version,
             ephemeral_working_directory: args.ephemeral,
+            prometheus_scrape_interval: args
+                .scrape_interval
+                .or(config.prometheus_scrape_interval)
+                .unwrap_or_else(|| Duration::from_secs(5)),
         }
     }
 }
@@ -143,14 +166,21 @@ struct Endpoint {
     url: Url,
     job_name: String,
     honor_labels: bool,
+    scrape_interval: Option<Duration>,
 }
 
 impl Endpoint {
-    fn new(url: Url, job_name: String, honor_labels: bool) -> Self {
+    fn new(
+        url: Url,
+        job_name: String,
+        honor_labels: bool,
+        scrape_interval: Option<Duration>,
+    ) -> Self {
         Self {
             url,
             job_name,
             honor_labels,
+            scrape_interval,
         }
     }
 }
@@ -184,6 +214,7 @@ impl From<Endpoint> for ScrapeConfig {
             metrics_path: Some(metrics_path.to_string()),
             scheme,
             honor_labels: Some(endpoint.honor_labels),
+            scrape_interval: endpoint.scrape_interval,
         }
     }
 }
@@ -199,7 +230,7 @@ pub async fn handle_command(args: CliArguments, config: AmConfig, mp: MultiProgr
         let url = endpoint_parser(&url)?;
 
         // Add the provided URL with the job name am_0
-        let endpoint = Endpoint::new(url, "am_0".to_string(), false);
+        let endpoint = Endpoint::new(url, "am_0".to_string(), false, None);
         args.metrics_endpoints.push(endpoint);
     }
 
@@ -228,7 +259,7 @@ pub async fn handle_command(args: CliArguments, config: AmConfig, mp: MultiProgr
 
     if args.pushgateway_enabled {
         let url = Url::parse("http://localhost:9091/pushgateway/metrics").unwrap();
-        let endpoint = Endpoint::new(url, "am_pushgateway".to_string(), true);
+        let endpoint = Endpoint::new(url, "am_pushgateway".to_string(), true, None);
         args.metrics_endpoints.push(endpoint);
     }
 
@@ -258,7 +289,10 @@ pub async fn handle_command(args: CliArguments, config: AmConfig, mp: MultiProgr
             debug!("Found prometheus in: {:?}", prometheus_path);
         }
 
-        let prometheus_config = generate_prom_config(prometheus_args.metrics_endpoints)?;
+        let prometheus_config = generate_prom_config(
+            prometheus_args.prometheus_scrape_interval,
+            prometheus_args.metrics_endpoints,
+        )?;
 
         start_prometheus(
             &prometheus_path,
@@ -479,12 +513,15 @@ fn determine_os_and_arch() -> Result<(&'static str, &'static str)> {
 ///
 /// For now this will expand a simple template and only has support for a single
 /// endpoint.
-fn generate_prom_config(metric_endpoints: Vec<Endpoint>) -> Result<prometheus::Config> {
+fn generate_prom_config(
+    scrape_interval: Duration,
+    metric_endpoints: Vec<Endpoint>,
+) -> Result<prometheus::Config> {
     let scrape_configs = metric_endpoints.into_iter().map(Into::into).collect();
 
     let config = prometheus::Config {
         global: prometheus::GlobalConfig {
-            scrape_interval: "15s".to_string(),
+            scrape_interval,
             evaluation_interval: "15s".to_string(),
         },
         scrape_configs,

@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   script from explorer (#84)
 - Shorthand notion for endpoints defined within the config file (`am.toml`) is now
   allowed (#85)
+- Allow user to specify the Prometheus scrape interval (#87)
 
 ## [0.1.0]
 
