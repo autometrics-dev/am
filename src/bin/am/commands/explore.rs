@@ -7,7 +7,7 @@ use url::Url;
 
 #[derive(Parser, Clone)]
 pub struct CliArguments {
-    /// The endpoint(s) that Prometheus will scrape.
+    /// The endpoint(s) that will be passed to Explorer
     ///
     /// Multiple endpoints can be specified by separating them with a space.
     /// The endpoint can be provided in the following formats:
