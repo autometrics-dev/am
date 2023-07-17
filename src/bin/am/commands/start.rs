@@ -2,8 +2,8 @@ use crate::dir::AutoCleanupDir;
 use crate::downloader::{download_github_release, unpack, verify_checksum};
 use crate::interactive;
 use crate::server::start_web_server;
-use anyhow::{bail, Context, Result};
-use autometrics_am::config::AmConfig;
+use anyhow::{anyhow, bail, Context, Result};
+use autometrics_am::config::{endpoints_from_first_input, AmConfig};
 use autometrics_am::parser::endpoint_parser;
 use autometrics_am::prometheus;
 use autometrics_am::prometheus::ScrapeConfig;
@@ -16,7 +16,6 @@ use std::fs::File;
 use std::io::{Seek, SeekFrom};
 use std::net::SocketAddr;
 use std::path::Path;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 use std::{env, vec};
 use tempfile::NamedTempFile;
@@ -111,40 +110,11 @@ struct Arguments {
 
 impl Arguments {
     fn new(args: CliArguments, config: AmConfig) -> Self {
-        static COUNTER: AtomicUsize = AtomicUsize::new(0);
-
-        // If the user specified an endpoint using args, then use those.
-        // Otherwise use the endpoint configured in the config file. And
-        // fallback to an empty list if neither are configured.
-        let metrics_endpoints = if !args.metrics_endpoints.is_empty() {
-            args.metrics_endpoints
-                .into_iter()
-                .map(|url| {
-                    let num = COUNTER.fetch_add(1, Ordering::SeqCst);
-                    Endpoint::new(url, format!("am_{num}"), false, None)
-                })
-                .collect()
-        } else if let Some(endpoints) = config.endpoints {
-            endpoints
-                .into_iter()
-                .map(|endpoint| {
-                    let job_name = endpoint.job_name.unwrap_or_else(|| {
-                        format!("am_{num}", num = COUNTER.fetch_add(1, Ordering::SeqCst))
-                    });
-                    Endpoint::new(
-                        endpoint.url,
-                        job_name,
-                        endpoint.honor_labels.unwrap_or(false),
-                        endpoint.prometheus_scrape_interval,
-                    )
-                })
-                .collect()
-        } else {
-            Vec::new()
-        };
-
         Arguments {
-            metrics_endpoints,
+            metrics_endpoints: endpoints_from_first_input(args.metrics_endpoints, config.endpoints)
+                .into_iter()
+                .filter_map(|e| e.try_into().ok())
+                .collect(),
             prometheus_version: args.prometheus_version,
             listen_address: args.listen_address,
             pushgateway_enabled: args
@@ -162,7 +132,7 @@ impl Arguments {
 }
 
 #[derive(Debug, Clone)]
-struct Endpoint {
+pub struct Endpoint {
     url: Url,
     job_name: String,
     honor_labels: bool,
@@ -182,6 +152,21 @@ impl Endpoint {
             honor_labels,
             scrape_interval,
         }
+    }
+}
+
+impl TryFrom<autometrics_am::config::Endpoint> for Endpoint {
+    type Error = anyhow::Error;
+
+    fn try_from(value: autometrics_am::config::Endpoint) -> Result<Self, Self::Error> {
+        Ok(Self {
+            url: value.url,
+            job_name: value
+                .job_name
+                .ok_or_else(|| anyhow!("TryFrom requires job_name"))?,
+            honor_labels: value.honor_labels.unwrap_or(false),
+            scrape_interval: value.prometheus_scrape_interval,
+        })
     }
 }
 
