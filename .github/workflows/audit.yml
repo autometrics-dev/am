@@ -26,6 +26,7 @@ jobs:
       issues: write
     steps:
       - uses: actions/checkout@v3
-
+        with:
+          submodules: recursive
       - uses: actions-rust-lang/audit@v1
         name: Audit Rust Dependencies

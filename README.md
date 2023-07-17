@@ -84,6 +84,12 @@ If you are interested in getting involved:
 - Ask questions and share ideas in the [Github Discussions](https://github.com/orgs/autometrics-dev/discussions)
 - Take a look at the overall [Autometrics Project Roadmap](https://github.com/orgs/autometrics-dev/projects/1)
 
+If you are cloning this repository to make changes, be sure to clone it **with submodules**:
+
+```shell
+git clone --recurse-submodules https://github.com/autometrics-dev/am.git
+```
+
 Planning to release a new version of `am`? Take a look at our [releasing](RELEASING.md) guide.
 
 ## License
