@@ -17,7 +17,7 @@ use std::io::{Seek, SeekFrom};
 use std::net::SocketAddr;
 use std::path::Path;
 use std::time::Duration;
-use std::{env, vec};
+use std::{env, fs, vec};
 use tempfile::NamedTempFile;
 use tokio::{process, select};
 use tracing::{debug, info, warn};
@@ -95,6 +95,10 @@ pub struct CliArguments {
     /// Whenever to clean up files created by Prometheus/Pushgateway after successful execution
     #[clap(short = 'd', long, env)]
     ephemeral: bool,
+
+    /// Whenever to *NOT* load the autometrics rules file into Prometheus
+    #[clap(long, env)]
+    no_rules: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -106,6 +110,7 @@ struct Arguments {
     pushgateway_enabled: bool,
     pushgateway_version: String,
     ephemeral_working_directory: bool,
+    no_rules: bool,
 }
 
 impl Arguments {
@@ -127,6 +132,7 @@ impl Arguments {
                 .scrape_interval
                 .or(config.prometheus_scrape_interval)
                 .unwrap_or_else(|| Duration::from_secs(5)),
+            no_rules: args.no_rules,
         }
     }
 }
@@ -277,12 +283,14 @@ pub async fn handle_command(args: CliArguments, config: AmConfig, mp: MultiProgr
         let prometheus_config = generate_prom_config(
             prometheus_args.prometheus_scrape_interval,
             prometheus_args.metrics_endpoints,
+            args.no_rules,
         )?;
 
         start_prometheus(
             &prometheus_path,
             &prometheus_config,
             args.ephemeral_working_directory,
+            args.no_rules,
         )
         .await
     };
@@ -501,18 +509,27 @@ fn determine_os_and_arch() -> Result<(&'static str, &'static str)> {
 fn generate_prom_config(
     scrape_interval: Duration,
     metric_endpoints: Vec<Endpoint>,
+    no_rules: bool,
 ) -> Result<prometheus::Config> {
     let scrape_configs = metric_endpoints.into_iter().map(Into::into).collect();
 
-    let config = prometheus::Config {
+    let rule_files = if no_rules {
+        None
+    } else {
+        let path = env::temp_dir().join("autometrics.rules.yml");
+        Some(vec![path.into_os_string().into_string().map_err(|_| {
+            anyhow!("failed to convert OsString into String")
+        })?])
+    };
+
+    Ok(prometheus::Config {
         global: prometheus::GlobalConfig {
             scrape_interval,
             evaluation_interval: "15s".to_string(),
         },
         scrape_configs,
-    };
-
-    Ok(config)
+        rule_files,
+    })
 }
 
 /// Checks whenever the endpoint works
@@ -536,9 +553,12 @@ async fn start_prometheus(
     prometheus_path: &Path,
     prometheus_config: &prometheus::Config,
     ephemeral: bool,
+    no_rules: bool,
 ) -> Result<()> {
-    // First write the config to a temp file
-    let config_file_path = env::temp_dir().join("prometheus.yml");
+    // First write needed files to temp
+    let temp_dir = env::temp_dir();
+
+    let config_file_path = temp_dir.join("prometheus.yml");
     let config_file = File::create(&config_file_path)?;
 
     debug!(
@@ -547,6 +567,14 @@ async fn start_prometheus(
     );
 
     serde_yaml::to_writer(&config_file, &prometheus_config)?;
+
+    if !no_rules {
+        let rule_file = temp_dir.join("autometrics.rules.yml");
+        fs::write(
+            rule_file,
+            include_bytes!("../../../../files/autometrics-shared/autometrics.rules.yml"),
+        )?;
+    }
 
     // TODO: Capture prometheus output into a internal buffer and expose it
     // through an api.
