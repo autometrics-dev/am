@@ -15,9 +15,6 @@ pub struct AmConfig {
     #[serde(rename = "endpoint")]
     pub endpoints: Option<Vec<Endpoint>>,
 
-    /// Prometheus endpoint which should get passed to Dora when invoking `am explore`
-    pub prometheus_endpoint: Option<Url>,
-
     /// Startup the pushgateway.
     pub pushgateway_enabled: Option<bool>,
 

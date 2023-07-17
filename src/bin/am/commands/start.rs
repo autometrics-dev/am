@@ -158,7 +158,7 @@ impl Endpoint {
 impl TryFrom<autometrics_am::config::Endpoint> for Endpoint {
     type Error = anyhow::Error;
 
-    fn try_from(value: autometrics_am::config::Endpoint) -> std::result::Result<Self, Self::Error> {
+    fn try_from(value: autometrics_am::config::Endpoint) -> Result<Self, Self::Error> {
         Ok(Self {
             url: value.url,
             job_name: value
