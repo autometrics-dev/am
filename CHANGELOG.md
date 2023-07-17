@@ -25,6 +25,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   allowed (#85)
 - Allow user to specify the Prometheus scrape interval (#87)
 - Added new subcommand `explore` which opens up explorer in the browser (#89)
+- The Autometrics SLO rules will now be automatically loaded into Prometheus if
+  `--no-rules` is not specified (#94)
 
 ## [0.1.0]
 
