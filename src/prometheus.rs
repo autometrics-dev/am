@@ -5,6 +5,8 @@ use std::time::Duration;
 pub struct Config {
     pub global: GlobalConfig,
     pub scrape_configs: Vec<ScrapeConfig>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub rule_files: Vec<String>,
 }
 
 #[derive(Debug, Serialize)]

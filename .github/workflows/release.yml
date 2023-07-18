@@ -10,6 +10,8 @@ jobs:
     steps:
       - name: checkout
         uses: actions/checkout@v3
+        with:
+          submodules: recursive
       - name: validate version
         run: |
           # Extract the version from the Cargo.toml
@@ -51,6 +53,8 @@ jobs:
     steps:
       - name: checkout
         uses: actions/checkout@v3
+        with:
+          submodules: recursive
       - name: build
         uses: houseabsolute/actions-rust-cross@v0
         with:

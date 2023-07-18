@@ -1,0 +1,3 @@
+[submodule "files/autometrics-shared"]
+	path = files/autometrics-shared
+	url = https://github.com/autometrics-dev/autometrics-shared.git
