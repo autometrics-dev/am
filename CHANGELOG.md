@@ -31,7 +31,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added new subcommand `explore` which opens up explorer in the browser (#89)
 - The Autometrics SLO rules will now be automatically loaded into Prometheus if
   `--no-rules` is not specified (#94)
-- Release version 0.2.0 (#95)
 
 ## [0.1.0]
 
