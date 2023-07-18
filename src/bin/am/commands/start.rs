@@ -283,14 +283,14 @@ pub async fn handle_command(args: CliArguments, config: AmConfig, mp: MultiProgr
         let prometheus_config = generate_prom_config(
             prometheus_args.prometheus_scrape_interval,
             prometheus_args.metrics_endpoints,
-            args.no_rules,
+            !args.no_rules,
         )?;
 
         start_prometheus(
             &prometheus_path,
             &prometheus_config,
             args.ephemeral_working_directory,
-            args.no_rules,
+            !args.no_rules,
         )
         .await
     };
@@ -509,18 +509,21 @@ fn determine_os_and_arch() -> Result<(&'static str, &'static str)> {
 fn generate_prom_config(
     scrape_interval: Duration,
     metric_endpoints: Vec<Endpoint>,
-    no_rules: bool,
+    enable_rules: bool,
 ) -> Result<prometheus::Config> {
     let scrape_configs = metric_endpoints.into_iter().map(Into::into).collect();
 
-    let rule_files = if no_rules {
-        None
-    } else {
+    let mut rule_files = Vec::new();
+
+    if enable_rules {
         let path = env::temp_dir().join("autometrics.rules.yml");
-        Some(vec![path.into_os_string().into_string().map_err(|_| {
-            anyhow!("failed to convert OsString into String")
-        })?])
-    };
+        let path_str = path
+            .into_os_string()
+            .into_string()
+            .map_err(|_| anyhow!("failed to convert OsString into String"))?;
+
+        rule_files.push(path_str);
+    }
 
     Ok(prometheus::Config {
         global: prometheus::GlobalConfig {
@@ -553,7 +556,7 @@ async fn start_prometheus(
     prometheus_path: &Path,
     prometheus_config: &prometheus::Config,
     ephemeral: bool,
-    no_rules: bool,
+    enable_rules: bool,
 ) -> Result<()> {
     // First write needed files to temp
     let temp_dir = env::temp_dir();
@@ -568,7 +571,7 @@ async fn start_prometheus(
 
     serde_yaml::to_writer(&config_file, &prometheus_config)?;
 
-    if !no_rules {
+    if enable_rules {
         let rule_file = temp_dir.join("autometrics.rules.yml");
         fs::write(
             rule_file,
