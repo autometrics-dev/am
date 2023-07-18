@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- 
+
+## [0.2.0]
+
 - Make logging less verbose, and introduce a `--verbose` flag to verbose logging (#62)
 - Use host and port for job name in Prometheus target list (#66)
 - Prometheus/Pushgateway data directory no longer defaults to current working directory (#76)
@@ -27,6 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added new subcommand `explore` which opens up explorer in the browser (#89)
 - The Autometrics SLO rules will now be automatically loaded into Prometheus if
   `--no-rules` is not specified (#94)
+- Release version 0.2.0 (#95)
 
 ## [0.1.0]
 
