@@ -68,7 +68,7 @@ pub(crate) async fn handle_command(args: Arguments, mp: MultiProgress) -> Result
         &file,
         AUTOMETRICS_GITHUB_ORG,
         AUTOMETRICS_AM_REPO,
-        new_tag.strip_prefix('v').unwrap_or_else(|| &new_tag),
+        new_tag.strip_prefix('v').unwrap_or(&new_tag),
         &binary_asset.name,
         &mp,
     )
@@ -84,7 +84,7 @@ pub(crate) async fn handle_command(args: Arguments, mp: MultiProgress) -> Result
     let remote_checksum = checksum_line
         .split_once(' ')
         .map(|(checksum, _)| checksum)
-        .unwrap_or_else(|| &checksum_line);
+        .unwrap_or(&checksum_line);
 
     if calculated_checksum != remote_checksum {
         debug!(
@@ -111,7 +111,7 @@ fn update_needed(release: &Release) -> Result<bool> {
         release
             .tag_name
             .strip_prefix('v')
-            .unwrap_or_else(|| &release.tag_name),
+            .unwrap_or(&release.tag_name),
     )
     .parse()?;
 
