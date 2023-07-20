@@ -65,7 +65,11 @@ jobs:
         run: |
           mkdir -p /tmp/artifact/
           cp "target/${{ matrix.platform.target }}/release/${{ matrix.platform.bin }}" "/tmp/artifact/${{ matrix.platform.file-name }}"
+      - name: calculate sha256sum
+        run: sha256sum /tmp/artifact/${{ matrix.platform.file-name }} >> /tmp/artifact/${{ matrix.platform.file-name }}.sha256
       - name: attach artifact to release
         uses: softprops/action-gh-release@v1
         with:
-          files: "/tmp/artifact/${{ matrix.platform.file-name }}"
+          files: |
+            /tmp/artifact/${{ matrix.platform.file-name }}
+            /tmp/artifact/${{ matrix.platform.file-name }}.sha256
