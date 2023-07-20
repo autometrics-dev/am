@@ -27,10 +27,13 @@ humantime = "2.1.0"
 humantime-serde = "1.1.1"
 include_dir = { version = "0.7.3" }
 indicatif = "0.17.5"
+itertools = "0.10.5"
+octocrab = "0.25.0"
 once_cell = { version = "1.17.1" }
 open = "4.1.0"
 remove_dir_all = { version = "0.8.2" }
 reqwest = { version = "0.11.18", default-features = false, features = ["json", "rustls-tls", "stream"] }
+semver_rs = "0.2.0"
 serde = { version = "1.0.163", features = ["derive"] }
 serde_yaml = { version = "0.9.21" }
 sha2 = "0.10.6"

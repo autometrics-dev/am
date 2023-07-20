@@ -16,6 +16,7 @@ mod dir;
 mod downloader;
 mod interactive;
 mod server;
+mod updater;
 
 #[tokio::main]
 async fn main() {

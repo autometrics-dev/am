@@ -1,3 +1,4 @@
+use crate::updater;
 use anyhow::Result;
 use autometrics_am::config::AmConfig;
 use clap::{Parser, Subcommand};
@@ -47,6 +48,9 @@ pub enum SubCommands {
     /// discuss various things related to Autometrics and the `am` CLI
     Discord,
 
+    /// Run the updater
+    Update(updater::Arguments),
+
     #[clap(hide = true)]
     MarkdownHelp,
 }
@@ -65,6 +69,7 @@ pub async fn handle_command(app: Application, config: AmConfig, mp: MultiProgres
 
             Ok(())
         }
+        SubCommands::Update(args) => updater::handle_command(args, mp).await,
         SubCommands::MarkdownHelp => {
             clap_markdown::print_help_markdown::<Application>();
             Ok(())
