@@ -10,7 +10,7 @@ pub mod start;
 pub mod system;
 
 #[derive(Parser)]
-#[command(author, version, about, long_about = None)]
+#[command(author, version, about, long_about = None, display_name = "am")]
 pub struct Application {
     #[command(subcommand)]
     pub command: SubCommands,
