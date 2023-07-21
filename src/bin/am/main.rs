@@ -28,6 +28,8 @@ async fn main() {
         std::process::exit(1);
     }
 
+    tokio::task::spawn(updater::update_check());
+
     let config = match load_config(app.config_file.clone()).await {
         Ok(config) => config,
         Err(err) => {

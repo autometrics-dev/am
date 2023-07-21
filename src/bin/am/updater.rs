@@ -2,13 +2,15 @@ use crate::commands::start::CLIENT;
 use crate::downloader::download_github_release;
 use anyhow::{anyhow, bail, Context, Result};
 use clap::Parser;
+use directories::ProjectDirs;
 use indicatif::MultiProgress;
 use itertools::Itertools;
 use octocrab::models::repos::{Asset, Release};
 use semver_rs::Version;
 use std::fs::File;
+use std::time::{Duration, SystemTime};
 use std::{env, fs};
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, trace};
 
 const AUTOMETRICS_GITHUB_ORG: &str = "autometrics-dev";
 const AUTOMETRICS_AM_REPO: &str = "am";
@@ -103,6 +105,55 @@ pub(crate) async fn handle_command(args: Arguments, mp: MultiProgress) -> Result
 
     info!("Successfully updated to {new_tag}");
     Ok(())
+}
+
+pub(crate) async fn update_check() {
+    let project_dirs =
+        ProjectDirs::from("", "autometrics", "am").expect("home directory does not exisT?");
+    let check_file = project_dirs.config_dir().join("version_check");
+
+    let should_check = match fs::metadata(&check_file) {
+        Ok(metadata) => {
+            if let Ok(date) = metadata.modified() {
+                date < (SystemTime::now() - Duration::from_secs(60 * 60 * 24))
+            } else {
+                false
+            }
+        }
+        Err(err) => {
+            // This will most likely be caused by the file not existing, so we
+            // will just trace it and go ahead with the version check.
+            trace!(%err, "checking the update file check resulted in a error");
+            true
+        }
+    };
+
+    // We've checked the version recently, so just return early indicating that
+    // no update should be done.
+    if !should_check {
+        return;
+    }
+
+    let release = latest_release().await;
+
+    if release.is_err() {
+        return;
+    }
+
+    // safe cuz i checked it literally 2 lines above bruh
+    let release = release.unwrap();
+
+    let result = update_needed(&release);
+
+    if result.is_err() {
+        return;
+    }
+
+    if !result.unwrap() {
+        return;
+    }
+
+    info!("New update is available: {}", release.tag_name);
 }
 
 fn update_needed(release: &Release) -> Result<bool> {
