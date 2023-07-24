@@ -108,6 +108,7 @@ jobs:
         working-directory: /tmp/artifact/
         env:
           AM_VERSION: ${{ needs.validate-version.outputs.version }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh workflow run update_formula.yml \
           -R autometrics-dev/homebrew-tap \
