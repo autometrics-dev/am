@@ -134,22 +134,10 @@ pub(crate) async fn update_check() {
         return;
     }
 
-    let release = latest_release().await;
+    let Ok(release) = latest_release().await else { return };
+    let Ok(needs_update) = update_needed(&release) else { return };
 
-    if release.is_err() {
-        return;
-    }
-
-    // safe cuz i checked it literally 2 lines above bruh
-    let release = release.unwrap();
-
-    let result = update_needed(&release);
-
-    if result.is_err() {
-        return;
-    }
-
-    if !result.unwrap() {
+    if !needs_update {
         return;
     }
 
