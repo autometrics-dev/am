@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - SHA-256 checksums are now provided for all artifact downloads (#101)
 - Added self updater (#102)
+- Use `clap-markdown` fork that enables formatting by display name (#103)
 
 ## [0.2.0]
 
