@@ -6,6 +6,7 @@ use directories::ProjectDirs;
 use indicatif::MultiProgress;
 use itertools::Itertools;
 use octocrab::models::repos::{Asset, Release};
+use self_replace::self_replace;
 use semver_rs::Version;
 use std::fs::File;
 use std::time::{Duration, SystemTime};
@@ -100,8 +101,8 @@ pub(crate) async fn handle_command(args: Arguments, mp: MultiProgress) -> Result
         bail!("Calculated sha256 hash does not match the remote sha256 hash");
     }
 
-    fs::rename(&temp_exe, executable)
-        .context("Failed to rename new executable into old executable")?;
+    self_replace(&temp_exe).context("failed to replace self")?;
+    fs::remove_file(&temp_exe).context("failed to delete updater file")?;
 
     info!("Successfully updated to {new_tag}");
     Ok(())
@@ -110,6 +111,7 @@ pub(crate) async fn handle_command(args: Arguments, mp: MultiProgress) -> Result
 pub(crate) async fn update_check() {
     let Some(project_dirs) = ProjectDirs::from("", "autometrics", "am") else {
         warn!("failed to run update checker: home directory does not exist");
+        return;
     };
 
     let check_file = project_dirs.config_dir().join("version_check");

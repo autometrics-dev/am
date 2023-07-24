@@ -33,9 +33,12 @@ async fn main() {
         tokio::task::spawn(updater::update_check());
     }
 
-    let Ok(config) = load_config(app.config_file.clone()).await else {
-        error!("Unable to load config: {:?}", err);
-        std::process::exit(1);
+    let config = match load_config(app.config_file.clone()).await {
+        Ok(config) => config,
+        Err(err) => {
+            error!("Unable to load config: {:?}", err);
+            std::process::exit(1);
+        }
     };
 
     let result = handle_command(app, config, multi_progress).await;
