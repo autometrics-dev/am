@@ -53,27 +53,35 @@ jobs:
             target: aarch64-apple-darwin
             bin: am
             file-name: am-macos-aarch64
+
     runs-on: ${{ matrix.platform.os }}
     steps:
+
       - name: checkout
         uses: actions/checkout@v3
         with:
           submodules: recursive
+
       - name: build
         uses: houseabsolute/actions-rust-cross@v0
         with:
           target: ${{ matrix.platform.target }}
           args: "--locked --release"
           strip: true
+
       - name: prepare binary
         run: |
           mkdir -p /tmp/artifact/
           cp "target/${{ matrix.platform.target }}/release/${{ matrix.platform.bin }}" "/tmp/artifact/${{ matrix.platform.file-name }}"
+
       - name: calculate sha256sum
         run: sha256sum /tmp/artifact/${{ matrix.platform.file-name }} >> /tmp/artifact/${{ matrix.platform.file-name }}.sha256
+
+
       - name: attach artifact to release
         uses: softprops/action-gh-release@v1
         with:
           files: |
             /tmp/artifact/${{ matrix.platform.file-name }}
             /tmp/artifact/${{ matrix.platform.file-name }}.sha256
+
