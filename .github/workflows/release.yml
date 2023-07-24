@@ -90,3 +90,29 @@ jobs:
             /tmp/artifact/${{ matrix.platform.file-name }}
             /tmp/artifact/${{ matrix.platform.file-name }}.sha256
 
+  homebrew-release:
+    runs-on: ubuntu-latest
+    name: Update Homebrew tap formula
+    needs: [attach-artifacts, validate-version]
+
+    steps:
+      - name: prepare folder
+        run: mkdir -p /tmp/artifact
+
+      - name: get the SHA256 artifacts
+        uses: actions/download-artifact
+        with:
+          path: /tmp/artifact
+
+      - name: trigger homebrew workflow
+        working-directory: /tmp/artifact/
+        env:
+          AM_VERSION: ${{ needs.validate-version.outputs.version }}
+        run: |
+          gh workflow run update_formula.yml \
+          -R autometrics-dev/homebrew-tap \
+          -f AM_VERSION=$AM_VERSION \
+          -f SHA256_AARCH64_APPLE_DARWIN=$(cat am-macos-aarch64.sha256 | awk '{print $1}') \
+          -f SHA256_X86_64_APPLE_DARWIN=$(cat am-macos-x86_64.sha256 | awk '{print $1}') \
+          -f SHA256_AARCH64_LINUX_GNU=$(cat am-linux-aarch64.sha256 | awk '{print $1}') \
+          -f SHA256_X86_64_LINUX_GNU=$(cat linux_x86_64.sha256.sha256 | awk '{print $1}')
