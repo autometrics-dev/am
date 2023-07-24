@@ -77,6 +77,11 @@ jobs:
       - name: calculate sha256sum
         run: sha256sum /tmp/artifact/${{ matrix.platform.file-name }} >> /tmp/artifact/${{ matrix.platform.file-name }}.sha256
 
+      - name: upload SHA256 for next step
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ matrix.platform.file-name }}.sha256
+          path: /tmp/artifact/${{ matrix.platform.file-name }}.sha256
 
       - name: attach artifact to release
         uses: softprops/action-gh-release@v1
