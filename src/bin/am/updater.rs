@@ -10,7 +10,7 @@ use semver_rs::Version;
 use std::fs::File;
 use std::time::{Duration, SystemTime};
 use std::{env, fs};
-use tracing::{debug, error, info, trace};
+use tracing::{debug, error, info, trace, warn};
 
 const AUTOMETRICS_GITHUB_ORG: &str = "autometrics-dev";
 const AUTOMETRICS_AM_REPO: &str = "am";
@@ -108,8 +108,10 @@ pub(crate) async fn handle_command(args: Arguments, mp: MultiProgress) -> Result
 }
 
 pub(crate) async fn update_check() {
-    let project_dirs =
-        ProjectDirs::from("", "autometrics", "am").expect("home directory does not exisT?");
+    let Some(project_dirs) = ProjectDirs::from("", "autometrics", "am") else {
+        warn!("failed to run update checker: home directory does not exist");
+    };
+
     let check_file = project_dirs.config_dir().join("version_check");
 
     let should_check = match fs::metadata(&check_file) {
