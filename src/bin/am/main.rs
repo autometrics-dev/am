@@ -29,7 +29,7 @@ async fn main() {
         std::process::exit(1);
     }
 
-    if std::env::var_os("AM_NO_UPDATE").is_some() {
+    if std::env::var_os("AM_NO_UPDATE").is_none() {
         tokio::task::spawn(updater::update_check());
     }
 
