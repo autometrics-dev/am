@@ -7,15 +7,19 @@ jobs:
   validate-version:
     name: validate `Cargo.toml` version matches tag
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.validate.outputs.VERSION }}
     steps:
       - name: checkout
         uses: actions/checkout@v3
         with:
           submodules: recursive
       - name: validate version
+        id: validate
         run: |
           # Extract the version from the Cargo.toml
           VERSION=$(cat "Cargo.toml" | grep '^version' | awk '{ split($0,version,"=") ; gsub(/[\ \"]/, "", version[2]) ; print version[2] }')
+          echo $VERSION >> "$GITHUB_OUTPUT"
           if [ "v${VERSION}" != "${{ github.event.release.tag_name }}" ]; then
             echo "::error file=Cargo.toml::Version set in Cargo.toml (v${VERSION}) does not match release version (${{ github.event.release.tag_name }})"
             exit 1
