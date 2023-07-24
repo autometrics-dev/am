@@ -115,7 +115,7 @@ async fn load_config(config_file: Option<PathBuf>) -> Result<AmConfig> {
             Ok(config)
         }
         Err(err) => {
-            if !is_default {
+            if is_default {
                 debug!(?err, "No config file found, using defaults");
                 Ok(AmConfig::default())
             } else {
