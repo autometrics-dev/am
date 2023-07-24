@@ -100,7 +100,7 @@ jobs:
         run: mkdir -p /tmp/artifact
 
       - name: get the SHA256 artifacts
-        uses: actions/download-artifact
+        uses: actions/download-artifact@v3
         with:
           path: /tmp/artifact
 
