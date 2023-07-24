@@ -23,22 +23,23 @@ async fn main() {
     let app = Application::parse();
 
     let (writer, multi_progress) = IndicatifWriter::new();
+
     if let Err(err) = init_logging(&app, writer) {
         eprintln!("Unable to initialize logging: {:#}", err);
         std::process::exit(1);
     }
 
-    tokio::task::spawn(updater::update_check());
+    if std::env::var_os("AM_NO_UPDATE").is_some() {
+        tokio::task::spawn(updater::update_check());
+    }
 
-    let config = match load_config(app.config_file.clone()).await {
-        Ok(config) => config,
-        Err(err) => {
-            error!("Unable to load config: {:?}", err);
-            std::process::exit(1);
-        }
+    let Ok(config) = load_config(app.config_file.clone()).await else {
+        error!("Unable to load config: {:?}", err);
+        std::process::exit(1);
     };
 
     let result = handle_command(app, config, multi_progress).await;
+
     match result {
         Ok(_) => debug!("Command completed successfully"),
         Err(err) => {
