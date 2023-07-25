@@ -2,74 +2,126 @@ on:
   release:
     types:
       - published
+  workflow_dispatch:
 
+name: Release new version
 jobs:
   validate-version:
-    name: validate `Cargo.toml` version matches tag
+    name: Validate `Cargo.toml` version matches tag
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.validate.outputs.version }}
     steps:
-      - name: checkout
-        uses: actions/checkout@v3
+      - uses: actions/checkout@v3
         with:
           submodules: recursive
-      - name: validate version
+
+      - name: Validate version
+        id: validate
+        if: github.event_name == 'release'
         run: |
           # Extract the version from the Cargo.toml
           VERSION=$(cat "Cargo.toml" | grep '^version' | awk '{ split($0,version,"=") ; gsub(/[\ \"]/, "", version[2]) ; print version[2] }')
+          echo version=$VERSION >> "$GITHUB_OUTPUT"
           if [ "v${VERSION}" != "${{ github.event.release.tag_name }}" ]; then
             echo "::error file=Cargo.toml::Version set in Cargo.toml (v${VERSION}) does not match release version (${{ github.event.release.tag_name }})"
             exit 1
           fi
 
-  attach-artifacts:
-    name: (${{ matrix.platform.name }}) build and attach artifacts to release
-    permissions:
-      contents: write
+  build-artifacts:
+    name: Build (${{ matrix.platform.name }})
     needs: validate-version
+    runs-on: ${{ matrix.platform.os }}
     strategy:
       matrix:
         platform:
-          - name: linux_x86_64
-            os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-            bin: am
-            file-name: am-linux-x86_64
           - name: linux_aarch64
             os: ubuntu-latest
             target: aarch64-unknown-linux-gnu
             bin: am
             file-name: am-linux-aarch64
-          - name: macos_x86_64
-            os: macOS-latest
-            target: x86_64-apple-darwin
+          - name: linux_x86_64
+            os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
             bin: am
-            file-name: am-macos-x86_64
+            file-name: am-linux-x86_64
           - name: macos_aarch64
             os: macOS-latest
             target: aarch64-apple-darwin
             bin: am
             file-name: am-macos-aarch64
-    runs-on: ${{ matrix.platform.os }}
+          - name: macos_x86_64
+            os: macOS-latest
+            target: x86_64-apple-darwin
+            bin: am
+            file-name: am-macos-x86_64
     steps:
-      - name: checkout
-        uses: actions/checkout@v3
+      - uses: actions/checkout@v3
         with:
           submodules: recursive
-      - name: build
+
+      - name: Build
         uses: houseabsolute/actions-rust-cross@v0
         with:
           target: ${{ matrix.platform.target }}
           args: "--locked --release"
           strip: true
-      - name: prepare binary
+
+      - name: Prepare binary
         run: |
           mkdir -p /tmp/artifact/
           cp "target/${{ matrix.platform.target }}/release/${{ matrix.platform.bin }}" "/tmp/artifact/${{ matrix.platform.file-name }}"
-      - name: calculate sha256sum
+
+      - name: Calculate sha256sum
         run: sha256sum /tmp/artifact/${{ matrix.platform.file-name }} >> /tmp/artifact/${{ matrix.platform.file-name }}.sha256
-      - name: attach artifact to release
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ matrix.platform.file-name }}
+          path: /tmp/artifact/${{ matrix.platform.file-name }}
+
+      - name: Upload SHA256
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ matrix.platform.file-name }}.sha256
+          path: /tmp/artifact/${{ matrix.platform.file-name }}.sha256
+
+  finalize-release:
+    name: Upload artifacts, trigger homebrew workflow
+    needs: [build-artifacts, validate-version]
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download am artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: build-artifacts
+
+      - name: Attach artifacts to release
         uses: softprops/action-gh-release@v1
         with:
           files: |
-            /tmp/artifact/${{ matrix.platform.file-name }}
-            /tmp/artifact/${{ matrix.platform.file-name }}.sha256
+            am-linux-aarch64
+            am-linux-aarch64.sha256
+            am-linux-x86_64
+            am-linux-x86_64.sha256
+            am-macos-aarch64
+            am-macos-aarch64.sha256
+            am-macos-x86_64
+            am-macos-x86_64.sha256
+
+      - name: Trigger homebrew workflow
+        env:
+          AM_VERSION: ${{ needs.validate-version.outputs.version }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh workflow run update_formula.yml \
+            -R autometrics-dev/homebrew-tap \
+            -f AM_VERSION=$AM_VERSION \
+            -f SHA256_AARCH64_APPLE_DARWIN=$(cat am-macos-aarch64.sha256 | awk '{print $1}') \
+            -f SHA256_AARCH64_LINUX_GNU=$(cat am-linux-aarch64.sha256 | awk '{print $1}') \
+            -f SHA256_X86_64_APPLE_DARWIN=$(cat am-macos-x86_64.sha256 | awk '{print $1}') \
+            -f SHA256_X86_64_LINUX_GNU=$(cat am-linux-x86_64.sha256 | awk '{print $1}')
