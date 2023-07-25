@@ -4,6 +4,7 @@ on:
       - published
   workflow_dispatch:
 
+name: Release new version
 jobs:
   validate-version:
     name: Validate `Cargo.toml` version matches tag
