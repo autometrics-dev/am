@@ -18,7 +18,7 @@ jobs:
 
       - name: Validate version
         id: validate
-        if: github.event_name == 'release'
+        continue-on-error: ${{ github.event_name == 'workflow_dispatch' }}
         run: |
           # Extract the version from the Cargo.toml
           VERSION=$(cat "Cargo.toml" | grep '^version' | awk '{ split($0,version,"=") ; gsub(/[\ \"]/, "", version[2]) ; print version[2] }')
