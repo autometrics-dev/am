@@ -1,3 +1,4 @@
+use crate::commands::update;
 use anyhow::{bail, Context, Result};
 use autometrics_am::config::AmConfig;
 use clap::Parser;
@@ -18,7 +19,6 @@ mod dir;
 mod downloader;
 mod interactive;
 mod server;
-mod updater;
 
 #[tokio::main]
 async fn main() {
@@ -32,7 +32,7 @@ async fn main() {
     }
 
     let task = if std::env::var_os("AM_NO_UPDATE").is_none() {
-        tokio::task::spawn(updater::update_check())
+        tokio::task::spawn(update::update_check())
     } else {
         tokio::task::spawn(async { /* intentionally left empty */ })
     };
