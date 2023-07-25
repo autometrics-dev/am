@@ -87,10 +87,10 @@ jobs:
       - name: Prepare files
         run: |
           ls -R
-          mv am/am-linux-aarch64/am-linux-aarch64 .
-          mv am/am-linux-x86_64/am-linux-x86_64 .
-          mv am/am-macos-aarch64/am-macos-aarch64 .
-          mv am/am-macos-x86_64/am-macos-x86_64 .
+          mv am-linux-aarch64/am am-linux-aarch64
+          mv am-linux-x86_64/am am-linux-x86_64
+          mv am-macos-aarch64/am am-macos-aarch64
+          mv am-macos-x86_64/am am-macos-x86_64
 
       - name: Calculate sha256sum
         run: |
