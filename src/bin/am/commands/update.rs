@@ -114,7 +114,14 @@ pub(crate) async fn update_check() {
         return;
     };
 
-    let check_file = project_dirs.config_dir().join("version_check");
+    let config_dir = project_dirs.config_dir();
+
+    if let Err(err) = fs::create_dir_all(config_dir) {
+        error!(?err, "failed to create config directory");
+        return;
+    }
+
+    let check_file = config_dir.join("version_check");
 
     let should_check = match fs::metadata(&check_file) {
         Ok(metadata) => {
