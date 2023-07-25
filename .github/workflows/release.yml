@@ -23,6 +23,7 @@ jobs:
           # Extract the version from the Cargo.toml
           VERSION=$(cat "Cargo.toml" | grep '^version' | awk '{ split($0,version,"=") ; gsub(/[\ \"]/, "", version[2]) ; print version[2] }')
           echo version=$VERSION >> "$GITHUB_OUTPUT"
+          echo '### Version $VERSION' >> $GITHUB_STEP_SUMMARY
           if [ "v${VERSION}" != "${{ github.event.release.tag_name }}" ]; then
             echo "::error file=Cargo.toml::Version set in Cargo.toml (v${VERSION}) does not match release version (${{ github.event.release.tag_name }})"
             exit 1
@@ -91,6 +92,10 @@ jobs:
           sha256sum am-linux-x86_64 >> am-linux-x86_64.sha256
           sha256sum am-macos-aarch64 >> am-macos-aarch64.sha256
           sha256sum am-macos-x86_64 >> am-macos-x86_64.sha256
+          echo "- am-linux-aarch64: \`$(cat am-linux-aarch64.sha256)\`" >> $GITHUB_STEP_SUMMARY
+          echo "- am-linux-x86_64: \`$(cat am-linux-x86_64.sha256)\`" >> $GITHUB_STEP_SUMMARY
+          echo "- am-macos-aarch64: \`$(cat am-macos-aarch64.sha256)\`" >> $GITHUB_STEP_SUMMARY
+          echo "- am-macos-x86_64: \`$(cat am-macos-x86_64.sha256)\`" >> $GITHUB_STEP_SUMMARY
 
       - name: Attach artifacts to release
         uses: softprops/action-gh-release@v1
