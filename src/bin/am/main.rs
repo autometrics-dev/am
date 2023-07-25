@@ -1,11 +1,14 @@
+use crate::commands::update;
 use anyhow::{bail, Context, Result};
 use autometrics_am::config::AmConfig;
 use clap::Parser;
 use commands::{handle_command, Application};
 use interactive::IndicatifWriter;
 use std::path::PathBuf;
+use std::time::Duration;
+use tokio::time::timeout;
 use tracing::level_filters::LevelFilter;
-use tracing::{debug, error};
+use tracing::{debug, error, warn};
 use tracing_subscriber::fmt::format;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
@@ -22,10 +25,17 @@ async fn main() {
     let app = Application::parse();
 
     let (writer, multi_progress) = IndicatifWriter::new();
+
     if let Err(err) = init_logging(&app, writer) {
         eprintln!("Unable to initialize logging: {:#}", err);
         std::process::exit(1);
     }
+
+    let task = if std::env::var_os("AM_NO_UPDATE").is_none() {
+        tokio::task::spawn(update::update_check())
+    } else {
+        tokio::task::spawn(async { /* intentionally left empty */ })
+    };
 
     let config = match load_config(app.config_file.clone()).await {
         Ok(config) => config,
@@ -36,6 +46,11 @@ async fn main() {
     };
 
     let result = handle_command(app, config, multi_progress).await;
+
+    if let Err(err) = timeout(Duration::from_secs(1), task).await {
+        warn!(?err, "background update check timed out");
+    }
+
     match result {
         Ok(_) => debug!("Command completed successfully"),
         Err(err) => {
