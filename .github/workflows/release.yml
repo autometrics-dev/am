@@ -105,6 +105,12 @@ jobs:
           echo "- am-macos-aarch64: \`$(cat am-macos-aarch64.sha256)\`" >> $GITHUB_STEP_SUMMARY
           echo "- am-macos-x86_64: \`$(cat am-macos-x86_64.sha256)\`" >> $GITHUB_STEP_SUMMARY
 
+      - name: Upload checksums
+        uses: actions/upload-artifact@v3
+        with:
+          name: checksums
+          path: "*.sha256"
+
       - name: Attach artifacts to release
         uses: softprops/action-gh-release@v1
         if: ${{ github.event_name == 'release' }}
@@ -132,9 +138,3 @@ jobs:
             -f SHA256_AARCH64_LINUX_GNU=$(cat am-linux-aarch64.sha256 | awk '{print $1}') \
             -f SHA256_X86_64_APPLE_DARWIN=$(cat am-macos-x86_64.sha256 | awk '{print $1}') \
             -f SHA256_X86_64_LINUX_GNU=$(cat am-linux-x86_64.sha256 | awk '{print $1}')
-
-      - name: Upload binary
-        uses: actions/upload-artifact@v3
-        with:
-          name: checksums
-          path: "*.sha256"
