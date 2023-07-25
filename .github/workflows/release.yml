@@ -76,7 +76,6 @@ jobs:
   finalize-release:
     name: Upload artifacts, trigger homebrew workflow
     needs: [build-artifacts, validate-version]
-    if: github.event_name == 'release'
     runs-on: ubuntu-latest
     permissions:
       contents: write
