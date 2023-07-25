@@ -47,16 +47,16 @@ async fn main() {
 
     let result = handle_command(app, config, multi_progress).await;
 
+    if let Err(err) = timeout(Duration::from_secs(1), task).await {
+        warn!(?err, "background update check timed out");
+    }
+
     match result {
         Ok(_) => debug!("Command completed successfully"),
         Err(err) => {
             error!("Command failed: {:?}", err);
             std::process::exit(1);
         }
-    }
-
-    if let Err(err) = timeout(Duration::from_secs(1), task).await {
-        warn!(?err, "background update check timed out");
     }
 }
 

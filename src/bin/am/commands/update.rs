@@ -8,7 +8,7 @@ use itertools::Itertools;
 use octocrab::models::repos::{Asset, Release};
 use self_replace::self_replace;
 use semver_rs::Version;
-use std::fs::File;
+use std::fs::{File, OpenOptions};
 use std::time::{Duration, SystemTime};
 use std::{env, fs};
 use tracing::{debug, error, info, trace, warn};
@@ -140,6 +140,15 @@ pub(crate) async fn update_check() {
 
     let Ok(release) = latest_release().await else { return };
     let Ok(needs_update) = update_needed(&release) else { return };
+
+    if let Err(err) = OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(true)
+        .open(&check_file)
+    {
+        trace!(?err, "failed to create `version_check` file");
+    }
 
     if !needs_update {
         return;
