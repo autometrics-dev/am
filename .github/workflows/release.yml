@@ -23,7 +23,7 @@ jobs:
           # Extract the version from the Cargo.toml
           VERSION=$(cat "Cargo.toml" | grep '^version' | awk '{ split($0,version,"=") ; gsub(/[\ \"]/, "", version[2]) ; print version[2] }')
           echo version=$VERSION >> "$GITHUB_OUTPUT"
-          echo "### Version $VERSION" >> $GITHUB_STEP_SUMMARY
+          echo "Cargo.toml version: \`$VERSION\`" >> $GITHUB_STEP_SUMMARY
           if [ "v${VERSION}" != "${{ github.event.release.tag_name }}" ]; then
             echo "::error file=Cargo.toml::Version set in Cargo.toml (v${VERSION}) does not match release version (${{ github.event.release.tag_name }})"
             exit 1
