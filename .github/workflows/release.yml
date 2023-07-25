@@ -67,25 +67,11 @@ jobs:
           args: "--locked --release"
           strip: true
 
-      - name: Prepare binary
-        run: |
-          mkdir -p /tmp/artifact/
-          cp "target/${{ matrix.platform.target }}/release/${{ matrix.platform.bin }}" "/tmp/artifact/${{ matrix.platform.file-name }}"
-
-      - name: Calculate sha256sum
-        run: sha256sum /tmp/artifact/${{ matrix.platform.file-name }} >> /tmp/artifact/${{ matrix.platform.file-name }}.sha256
-
       - name: Upload binary
         uses: actions/upload-artifact@v3
         with:
           name: ${{ matrix.platform.file-name }}
-          path: /tmp/artifact/${{ matrix.platform.file-name }}
-
-      - name: Upload SHA256
-        uses: actions/upload-artifact@v3
-        with:
-          name: ${{ matrix.platform.file-name }}.sha256
-          path: /tmp/artifact/${{ matrix.platform.file-name }}.sha256
+          path: "target/${{ matrix.platform.target }}/release/${{ matrix.platform.bin }}"
 
   finalize-release:
     name: Upload artifacts, trigger homebrew workflow
@@ -100,8 +86,16 @@ jobs:
         with:
           name: build-artifacts
 
+      - name: Calculate sha256sum
+        run: |
+          sha256sum am-linux-aarch64 >> am-linux-aarch64.sha256
+          sha256sum am-linux-x86_64 >> am-linux-x86_64.sha256
+          sha256sum am-macos-aarch64 >> am-macos-aarch64.sha256
+          sha256sum am-macos-x86_64 >> am-macos-x86_64.sha256
+
       - name: Attach artifacts to release
         uses: softprops/action-gh-release@v1
+        if: ${{ github.event_name == 'release' }}
         with:
           files: |
             am-linux-aarch64
@@ -114,6 +108,7 @@ jobs:
             am-macos-x86_64.sha256
 
       - name: Trigger homebrew workflow
+        if: ${{ github.event_name == 'release' }}
         env:
           AM_VERSION: ${{ needs.validate-version.outputs.version }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -125,3 +120,8 @@ jobs:
             -f SHA256_AARCH64_LINUX_GNU=$(cat am-linux-aarch64.sha256 | awk '{print $1}') \
             -f SHA256_X86_64_APPLE_DARWIN=$(cat am-macos-x86_64.sha256 | awk '{print $1}') \
             -f SHA256_X86_64_LINUX_GNU=$(cat am-linux-x86_64.sha256 | awk '{print $1}')
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v3
+        with:
+          path: "*.sha256"
