@@ -100,10 +100,11 @@ jobs:
           sha256sum am-linux-x86_64 >> am-linux-x86_64.sha256
           sha256sum am-macos-aarch64 >> am-macos-aarch64.sha256
           sha256sum am-macos-x86_64 >> am-macos-x86_64.sha256
-          echo "- am-linux-aarch64: \`$(cat am-linux-aarch64.sha256)\`" >> $GITHUB_STEP_SUMMARY
-          echo "- am-linux-x86_64: \`$(cat am-linux-x86_64.sha256)\`" >> $GITHUB_STEP_SUMMARY
-          echo "- am-macos-aarch64: \`$(cat am-macos-aarch64.sha256)\`" >> $GITHUB_STEP_SUMMARY
-          echo "- am-macos-x86_64: \`$(cat am-macos-x86_64.sha256)\`" >> $GITHUB_STEP_SUMMARY
+          echo "### Checksums"
+          echo "\`$(cat am-linux-aarch64.sha256)\`" >> $GITHUB_STEP_SUMMARY
+          echo "\`$(cat am-linux-x86_64.sha256)\`" >> $GITHUB_STEP_SUMMARY
+          echo "\`$(cat am-macos-aarch64.sha256)\`" >> $GITHUB_STEP_SUMMARY
+          echo "\`$(cat am-macos-x86_64.sha256)\`" >> $GITHUB_STEP_SUMMARY
 
       - name: Upload checksums
         uses: actions/upload-artifact@v3
