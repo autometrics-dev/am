@@ -4,8 +4,10 @@ use clap::Parser;
 use commands::{handle_command, Application};
 use interactive::IndicatifWriter;
 use std::path::PathBuf;
+use std::time::Duration;
+use tokio::time::timeout;
 use tracing::level_filters::LevelFilter;
-use tracing::{debug, error};
+use tracing::{debug, error, warn};
 use tracing_subscriber::fmt::format;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
@@ -29,9 +31,11 @@ async fn main() {
         std::process::exit(1);
     }
 
-    if std::env::var_os("AM_NO_UPDATE").is_none() {
-        tokio::task::spawn(updater::update_check());
-    }
+    let task = if std::env::var_os("AM_NO_UPDATE").is_none() {
+        tokio::task::spawn(updater::update_check())
+    } else {
+        tokio::task::spawn(async { /* intentionally left empty */ })
+    };
 
     let config = match load_config(app.config_file.clone()).await {
         Ok(config) => config,
@@ -49,6 +53,10 @@ async fn main() {
             error!("Command failed: {:?}", err);
             std::process::exit(1);
         }
+    }
+
+    if let Err(err) = timeout(Duration::from_secs(1), task).await {
+        warn!(?err, "background update check timed out");
     }
 }
 
