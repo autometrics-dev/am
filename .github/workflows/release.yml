@@ -83,8 +83,9 @@ jobs:
     steps:
       - name: Download am artifacts
         uses: actions/download-artifact@v3
-        with:
-          name: build-artifacts
+
+      - name: Prepare artifacts
+        run: mv build-artifacts/* ./
 
       - name: Calculate sha256sum
         run: |
