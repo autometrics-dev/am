@@ -83,12 +83,27 @@ jobs:
     steps:
       - name: Download am artifacts
         uses: actions/download-artifact@v3
+        with:
+          name: am-linux-aarch64
 
-      - name: Prepare artifacts
-        run: mv build-artifacts/* ./
+      - name: Download am artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: am-linux-x86_64
+
+      - name: Download am artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: am-macos-aarch64
+
+      - name: Download am artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: am-macos-x86_64
 
       - name: Calculate sha256sum
         run: |
+          ls -laR
           sha256sum am-linux-aarch64 >> am-linux-aarch64.sha256
           sha256sum am-linux-x86_64 >> am-linux-x86_64.sha256
           sha256sum am-macos-aarch64 >> am-macos-aarch64.sha256
