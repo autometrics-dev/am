@@ -2,6 +2,7 @@ on:
   release:
     types:
       - published
+  workflow_dispatch:
 
 jobs:
   validate-version:
@@ -16,6 +17,7 @@ jobs:
 
       - name: Validate version
         id: validate
+        if: github.event_name == 'release'
         run: |
           # Extract the version from the Cargo.toml
           VERSION=$(cat "Cargo.toml" | grep '^version' | awk '{ split($0,version,"=") ; gsub(/[\ \"]/, "", version[2]) ; print version[2] }')
@@ -87,6 +89,7 @@ jobs:
   finalize-release:
     name: Upload artifacts, trigger homebrew workflow
     needs: [build-artifacts, validate-version]
+    if: github.event_name == 'release'
     runs-on: ubuntu-latest
     permissions:
       contents: write
