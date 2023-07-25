@@ -88,7 +88,6 @@ jobs:
 
       - name: Prepare files
         run: |
-          ls -R
           mv artifacts/am-linux-aarch64/am am-linux-aarch64
           mv artifacts/am-linux-x86_64/am am-linux-x86_64
           mv artifacts/am-macos-aarch64/am am-macos-aarch64
