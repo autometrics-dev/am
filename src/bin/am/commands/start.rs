@@ -19,6 +19,7 @@ use std::path::Path;
 use std::time::Duration;
 use std::{env, fs, vec};
 use tempfile::NamedTempFile;
+use tokio::sync::oneshot;
 use tokio::{process, select};
 use tracing::{debug, info, warn};
 use url::Url;
@@ -254,10 +255,25 @@ pub async fn handle_command(args: CliArguments, config: AmConfig, mp: MultiProgr
         args.metrics_endpoints.push(endpoint);
     }
 
+    let (prometheus_tx, prometheus_rx) = oneshot::channel();
+    let (pushgateway_tx, pushgateway_rx) = oneshot::channel();
+
+    // Start web server for hosting the explorer, am api and proxies to the enabled services.
+    let web_server_task = async move {
+        start_web_server(
+            &args.listen_address,
+            args.pushgateway_enabled,
+            prometheus_tx,
+            pushgateway_tx,
+        )
+        .await
+    };
+
     // Start Prometheus server
     let prometheus_args = args.clone();
     let prometheus_local_data = local_data.clone();
     let prometheus_multi_progress = mp.clone();
+
     let prometheus_task = async move {
         let prometheus_version = prometheus_args.prometheus_version.trim_start_matches('v');
 
@@ -291,6 +307,7 @@ pub async fn handle_command(args: CliArguments, config: AmConfig, mp: MultiProgr
             &prometheus_config,
             args.ephemeral_working_directory,
             !args.no_rules,
+            &prometheus_rx.await?,
         )
         .await
     };
@@ -321,7 +338,12 @@ pub async fn handle_command(args: CliArguments, config: AmConfig, mp: MultiProgr
                 debug!("Found pushgateway in: {:?}", &pushgateway_path);
             }
 
-            start_pushgateway(&pushgateway_path, args.ephemeral_working_directory).await
+            start_pushgateway(
+                &pushgateway_path,
+                args.ephemeral_working_directory,
+                &pushgateway_rx.await?,
+            )
+            .await
         }
         .boxed()
     } else {
@@ -337,11 +359,6 @@ pub async fn handle_command(args: CliArguments, config: AmConfig, mp: MultiProgr
             .join(", ");
         info!("Now sampling the following endpoints for metrics: {endpoints}");
     }
-
-    // Start web server for hosting the explorer, am api and proxies to the enabled services.
-    let listen_address = args.listen_address;
-    let web_server_task =
-        async move { start_web_server(&listen_address, args.pushgateway_enabled).await };
 
     select! {
         biased;
@@ -557,6 +574,7 @@ async fn start_prometheus(
     prometheus_config: &prometheus::Config,
     ephemeral: bool,
     enable_rules: bool,
+    external_url: &SocketAddr,
 ) -> Result<()> {
     // First write needed files to temp
     let temp_dir = env::temp_dir();
@@ -597,7 +615,9 @@ async fn start_prometheus(
         .arg(format!("--config.file={}", config_file_path.display()))
         .arg("--web.listen-address=:9090")
         .arg("--web.enable-lifecycle")
-        .arg("--web.external-url=http://localhost:6789/prometheus") // TODO: Make sure this matches with that is actually running.
+        .arg(format!(
+            "--web.external-url=http://{external_url}/prometheus"
+        ))
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
@@ -616,13 +636,19 @@ async fn start_prometheus(
 
 /// Start a prometheus process. This will block until the Prometheus process
 /// stops.
-async fn start_pushgateway(pushgateway_path: &Path, ephemeral: bool) -> Result<()> {
+async fn start_pushgateway(
+    pushgateway_path: &Path,
+    ephemeral: bool,
+    external_url: &SocketAddr,
+) -> Result<()> {
     let work_dir = AutoCleanupDir::new("pushgateway", ephemeral)?;
 
     info!("Starting Pushgateway");
     let mut child = process::Command::new(pushgateway_path.join("pushgateway"))
         .arg("--web.listen-address=:9091")
-        .arg("--web.external-url=http://localhost:6789/pushgateway") // TODO: Make sure this matches with that is actually running.
+        .arg(format!(
+            "--web.external-url=http://{external_url}/pushgateway"
+        ))
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
