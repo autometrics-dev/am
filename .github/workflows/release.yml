@@ -125,3 +125,6 @@ jobs:
             -f SHA256_AARCH64_LINUX_GNU=$(cat am-linux-aarch64.sha256 | awk '{print $1}') \
             -f SHA256_X86_64_APPLE_DARWIN=$(cat am-macos-x86_64.sha256 | awk '{print $1}') \
             -f SHA256_X86_64_LINUX_GNU=$(cat am-linux-x86_64.sha256 | awk '{print $1}')
+
+      - name: Trigger the CLI reference docs update
+        run: gh workflow run update_cli_reference.yml -R autometrics-dev/docs
