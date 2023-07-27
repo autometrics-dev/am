@@ -358,16 +358,16 @@ pub async fn handle_command(args: CliArguments, config: AmConfig, mp: MultiProgr
             Ok(())
         }
 
+        Err(err) = web_server_task => {
+            bail!("Web server exited with an error: {err:?}");
+        }
+
         Err(err) = prometheus_task => {
             bail!("Prometheus exited with an error: {err:?}");
         }
 
         Err(err) = pushgateway_task => {
             bail!("Pushgateway exited with an error: {err:?}");
-        }
-
-        Err(err) = web_server_task => {
-            bail!("Web server exited with an error: {err:?}");
         }
 
         else => {
