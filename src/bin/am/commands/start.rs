@@ -564,7 +564,7 @@ async fn start_prometheus(
     prometheus_config: &prometheus::Config,
     ephemeral: bool,
     enable_rules: bool,
-    rx: Receiver<Option<SocketAddr>>,
+    mut rx: Receiver<Option<SocketAddr>>,
 ) -> Result<()> {
     // First write needed files to temp
     let temp_dir = env::temp_dir();
@@ -601,9 +601,9 @@ async fn start_prometheus(
 
     info!(bin_path = ?prometheus_path.display(), "Starting prometheus");
 
-    let external_url = rx.borrow().map_or_else(
-        || "localhost:6789".to_string(),
-        |address| address.to_string(),
+    let external_url = rx.wait_for(Option::is_some).await.map_or_else(
+        |_| "localhost:6789".to_string(),
+        |address| address.unwrap().to_string(),
     );
 
     let mut child = process::Command::new(prometheus_path)
@@ -634,13 +634,13 @@ async fn start_prometheus(
 async fn start_pushgateway(
     pushgateway_path: &Path,
     ephemeral: bool,
-    rx: Receiver<Option<SocketAddr>>,
+    mut rx: Receiver<Option<SocketAddr>>,
 ) -> Result<()> {
     let work_dir = AutoCleanupDir::new("pushgateway", ephemeral)?;
 
-    let external_url = rx.borrow().map_or_else(
-        || "localhost:6789".to_string(),
-        |address| address.to_string(),
+    let external_url = rx.wait_for(Option::is_some).await.map_or_else(
+        |_| "localhost:6789".to_string(),
+        |address| address.unwrap().to_string(),
     );
 
     info!("Starting Pushgateway");
