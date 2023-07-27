@@ -19,7 +19,8 @@ use std::path::Path;
 use std::time::Duration;
 use std::{env, fs, vec};
 use tempfile::NamedTempFile;
-use tokio::sync::oneshot;
+use tokio::sync::watch;
+use tokio::sync::watch::Receiver;
 use tokio::{process, select};
 use tracing::{debug, info, warn};
 use url::Url;
@@ -255,24 +256,18 @@ pub async fn handle_command(args: CliArguments, config: AmConfig, mp: MultiProgr
         args.metrics_endpoints.push(endpoint);
     }
 
-    let (prometheus_tx, prometheus_rx) = oneshot::channel();
-    let (pushgateway_tx, pushgateway_rx) = oneshot::channel();
+    let (tx, rx) = watch::channel(None);
 
     // Start web server for hosting the explorer, am api and proxies to the enabled services.
-    let web_server_task = async move {
-        start_web_server(
-            &args.listen_address,
-            args.pushgateway_enabled,
-            prometheus_tx,
-            pushgateway_tx,
-        )
-        .await
-    };
+    let web_server_task =
+        async move { start_web_server(&args.listen_address, args.pushgateway_enabled, tx).await };
 
     // Start Prometheus server
     let prometheus_args = args.clone();
     let prometheus_local_data = local_data.clone();
     let prometheus_multi_progress = mp.clone();
+
+    let prom_rx = rx.clone();
 
     let prometheus_task = async move {
         let prometheus_version = prometheus_args.prometheus_version.trim_start_matches('v');
@@ -307,7 +302,7 @@ pub async fn handle_command(args: CliArguments, config: AmConfig, mp: MultiProgr
             &prometheus_config,
             args.ephemeral_working_directory,
             !args.no_rules,
-            &prometheus_rx.await?,
+            prom_rx,
         )
         .await
     };
@@ -338,12 +333,7 @@ pub async fn handle_command(args: CliArguments, config: AmConfig, mp: MultiProgr
                 debug!("Found pushgateway in: {:?}", &pushgateway_path);
             }
 
-            start_pushgateway(
-                &pushgateway_path,
-                args.ephemeral_working_directory,
-                &pushgateway_rx.await?,
-            )
-            .await
+            start_pushgateway(&pushgateway_path, args.ephemeral_working_directory, rx).await
         }
         .boxed()
     } else {
@@ -574,7 +564,7 @@ async fn start_prometheus(
     prometheus_config: &prometheus::Config,
     ephemeral: bool,
     enable_rules: bool,
-    external_url: &SocketAddr,
+    rx: Receiver<Option<SocketAddr>>,
 ) -> Result<()> {
     // First write needed files to temp
     let temp_dir = env::temp_dir();
@@ -611,6 +601,11 @@ async fn start_prometheus(
 
     info!(bin_path = ?prometheus_path.display(), "Starting prometheus");
 
+    let external_url = rx.borrow().map_or_else(
+        || "localhost:6789".to_string(),
+        |address| address.to_string(),
+    );
+
     let mut child = process::Command::new(prometheus_path)
         .arg(format!("--config.file={}", config_file_path.display()))
         .arg("--web.listen-address=:9090")
@@ -639,9 +634,14 @@ async fn start_prometheus(
 async fn start_pushgateway(
     pushgateway_path: &Path,
     ephemeral: bool,
-    external_url: &SocketAddr,
+    rx: Receiver<Option<SocketAddr>>,
 ) -> Result<()> {
     let work_dir = AutoCleanupDir::new("pushgateway", ephemeral)?;
+
+    let external_url = rx.borrow().map_or_else(
+        || "localhost:6789".to_string(),
+        |address| address.to_string(),
+    );
 
     info!("Starting Pushgateway");
     let mut child = process::Command::new(pushgateway_path.join("pushgateway"))

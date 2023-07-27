@@ -4,7 +4,7 @@ use axum::response::Redirect;
 use axum::routing::{any, get};
 use axum::{Router, Server};
 use std::net::SocketAddr;
-use tokio::sync::oneshot::Sender;
+use tokio::sync::watch::Sender;
 use tracing::{debug, info};
 
 mod explorer;
@@ -15,8 +15,7 @@ mod util;
 pub(crate) async fn start_web_server(
     listen_address: &SocketAddr,
     enable_pushgateway: bool,
-    prometheus_sender: Sender<SocketAddr>,
-    pushgateway_sender: Sender<SocketAddr>,
+    tx: Sender<Option<SocketAddr>>,
 ) -> Result<()> {
     let mut app = Router::new()
         // Any calls to the root should be redirected to the explorer which is most likely what the user wants to use.
@@ -48,8 +47,7 @@ pub(crate) async fn start_web_server(
         .with_context(|| format!("failed to bind to {}", listen_address))?
         .serve(app.into_make_service());
 
-    let _ = prometheus_sender.send(server.local_addr());
-    let _ = pushgateway_sender.send(server.local_addr());
+    tx.send_replace(Some(server.local_addr()));
 
     debug!("Web server listening on {}", server.local_addr());
 
