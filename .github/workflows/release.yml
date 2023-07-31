@@ -18,11 +18,12 @@ jobs:
 
       - name: Validate version
         id: validate
-        if: github.event_name == 'release'
+        continue-on-error: ${{ github.event_name == 'workflow_dispatch' }}
         run: |
           # Extract the version from the Cargo.toml
           VERSION=$(cat "Cargo.toml" | grep '^version' | awk '{ split($0,version,"=") ; gsub(/[\ \"]/, "", version[2]) ; print version[2] }')
           echo version=$VERSION >> "$GITHUB_OUTPUT"
+          echo "Cargo.toml version: \`$VERSION\`" >> $GITHUB_STEP_SUMMARY
           if [ "v${VERSION}" != "${{ github.event.release.tag_name }}" ]; then
             echo "::error file=Cargo.toml::Version set in Cargo.toml (v${VERSION}) does not match release version (${{ github.event.release.tag_name }})"
             exit 1
@@ -67,30 +68,15 @@ jobs:
           args: "--locked --release"
           strip: true
 
-      - name: Prepare binary
-        run: |
-          mkdir -p /tmp/artifact/
-          cp "target/${{ matrix.platform.target }}/release/${{ matrix.platform.bin }}" "/tmp/artifact/${{ matrix.platform.file-name }}"
-
-      - name: Calculate sha256sum
-        run: sha256sum /tmp/artifact/${{ matrix.platform.file-name }} >> /tmp/artifact/${{ matrix.platform.file-name }}.sha256
-
       - name: Upload binary
         uses: actions/upload-artifact@v3
         with:
           name: ${{ matrix.platform.file-name }}
-          path: /tmp/artifact/${{ matrix.platform.file-name }}
-
-      - name: Upload SHA256
-        uses: actions/upload-artifact@v3
-        with:
-          name: ${{ matrix.platform.file-name }}.sha256
-          path: /tmp/artifact/${{ matrix.platform.file-name }}.sha256
+          path: "target/${{ matrix.platform.target }}/release/${{ matrix.platform.bin }}"
 
   finalize-release:
     name: Upload artifacts, trigger homebrew workflow
     needs: [build-artifacts, validate-version]
-    if: github.event_name == 'release'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -98,10 +84,36 @@ jobs:
       - name: Download am artifacts
         uses: actions/download-artifact@v3
         with:
-          name: build-artifacts
+          path: artifacts
+
+      - name: Prepare files
+        run: |
+          mv artifacts/am-linux-aarch64/am am-linux-aarch64
+          mv artifacts/am-linux-x86_64/am am-linux-x86_64
+          mv artifacts/am-macos-aarch64/am am-macos-aarch64
+          mv artifacts/am-macos-x86_64/am am-macos-x86_64
+
+      - name: Calculate sha256sum
+        run: |
+          sha256sum am-linux-aarch64 >> am-linux-aarch64.sha256
+          sha256sum am-linux-x86_64 >> am-linux-x86_64.sha256
+          sha256sum am-macos-aarch64 >> am-macos-aarch64.sha256
+          sha256sum am-macos-x86_64 >> am-macos-x86_64.sha256
+          echo "### Checksums"
+          echo "\`$(cat am-linux-aarch64.sha256)\`" >> $GITHUB_STEP_SUMMARY
+          echo "\`$(cat am-linux-x86_64.sha256)\`" >> $GITHUB_STEP_SUMMARY
+          echo "\`$(cat am-macos-aarch64.sha256)\`" >> $GITHUB_STEP_SUMMARY
+          echo "\`$(cat am-macos-x86_64.sha256)\`" >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload checksums
+        uses: actions/upload-artifact@v3
+        with:
+          name: checksums
+          path: "*.sha256"
 
       - name: Attach artifacts to release
         uses: softprops/action-gh-release@v1
+        if: ${{ github.event_name == 'release' }}
         with:
           files: |
             am-linux-aarch64
@@ -114,6 +126,7 @@ jobs:
             am-macos-x86_64.sha256
 
       - name: Trigger homebrew workflow
+        if: ${{ github.event_name == 'release' }}
         env:
           AM_VERSION: ${{ needs.validate-version.outputs.version }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
