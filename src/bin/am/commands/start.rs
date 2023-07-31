@@ -12,6 +12,7 @@ use directories::ProjectDirs;
 use futures_util::FutureExt;
 use indicatif::MultiProgress;
 use once_cell::sync::Lazy;
+use rand::distributions::{Alphanumeric, DistString};
 use std::fs::File;
 use std::io::{Seek, SeekFrom};
 use std::net::SocketAddr;
@@ -567,9 +568,15 @@ async fn start_prometheus(
     mut rx: Receiver<Option<SocketAddr>>,
 ) -> Result<()> {
     // First write needed files to temp
-    let temp_dir = env::temp_dir();
+    let runtime_dir = AutoCleanupDir::new(
+        &format!(
+            "am-prometheus-{}",
+            Alphanumeric.sample_string(&mut rand::thread_rng(), 6)
+        ),
+        true,
+    )?;
 
-    let config_file_path = temp_dir.join("prometheus.yml");
+    let config_file_path = runtime_dir.join("prometheus.yml");
     let config_file = File::create(&config_file_path)?;
 
     debug!(
@@ -580,7 +587,7 @@ async fn start_prometheus(
     serde_yaml::to_writer(&config_file, &prometheus_config)?;
 
     if enable_rules {
-        let rule_file = temp_dir.join("autometrics.rules.yml");
+        let rule_file = env::temp_dir().join("autometrics.rules.yml");
         fs::write(
             rule_file,
             include_bytes!("../../../../files/autometrics-shared/autometrics.rules.yml"),
