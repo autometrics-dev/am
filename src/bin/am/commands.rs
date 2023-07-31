@@ -8,6 +8,7 @@ use tracing::info;
 mod explore;
 pub mod start;
 pub mod system;
+pub mod update;
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None, display_name = "am")]
@@ -47,6 +48,9 @@ pub enum SubCommands {
     /// discuss various things related to Autometrics and the `am` CLI
     Discord,
 
+    /// Run the updater
+    Update(update::Arguments),
+
     #[clap(hide = true)]
     MarkdownHelp,
 }
@@ -65,6 +69,7 @@ pub async fn handle_command(app: Application, config: AmConfig, mp: MultiProgres
 
             Ok(())
         }
+        SubCommands::Update(args) => update::handle_command(args, mp).await,
         SubCommands::MarkdownHelp => {
             clap_markdown::print_help_markdown::<Application>();
             Ok(())
