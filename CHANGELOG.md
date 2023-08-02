@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Correct `web.external-url` will now be passed to Prometheus and Pushgateway
   if a custom one is specified with `--listen-address` (#112)
 - The generated Prometheus config now gets stored in a unique, temporary location (#113)
+- Added new subcommand `init` to create a config file interactively (#117)
 
 ## [0.2.1]
 
