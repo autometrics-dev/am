@@ -66,9 +66,9 @@ fn prompt_endpoint() -> Result<Endpoint> {
 }
 
 fn prompt_scrape_interval() -> Result<Option<Duration>> {
-    let scrape_interval: Option<u64> =
+    Ok(
         user_input_optional("Scrape Interval in seconds (leave empty for default)")?
-            .and_then(|i| i.parse().ok());
-
-    Ok(scrape_interval.map(|input| Duration::from_secs(input)))
+            .and_then(|i| i.parse().ok())
+            .map(Duration::from_secs),
+    )
 }
