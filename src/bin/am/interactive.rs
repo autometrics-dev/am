@@ -7,13 +7,28 @@ use tracing_subscriber::fmt::MakeWriter;
 pub fn user_input(prompt: impl Into<String>) -> Result<String> {
     Input::with_theme(&SimpleTheme)
         .with_prompt(prompt)
-        .interact()
+        .interact_text()
+}
+
+pub fn user_input_optional(prompt: impl Into<String>) -> Result<Option<String>> {
+    let input: String = Input::with_theme(&SimpleTheme)
+        .with_prompt(prompt)
+        .allow_empty(true)
+        .interact_text()?;
+
+    Ok(if input.is_empty() { None } else { Some(input) })
 }
 
 pub fn confirm(prompt: impl Into<String>) -> Result<bool> {
     Confirm::with_theme(&SimpleTheme)
         .with_prompt(prompt)
         .interact()
+}
+
+pub fn confirm_optional(prompt: impl Into<String>) -> Result<Option<bool>> {
+    Confirm::with_theme(&SimpleTheme)
+        .with_prompt(prompt)
+        .interact_opt()
 }
 
 /// A Writer that will output to stderr. It will also suspend any progress bars,
