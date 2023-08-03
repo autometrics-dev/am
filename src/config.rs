@@ -1,6 +1,6 @@
 use crate::parser::endpoint_parser;
 use serde::de::Error;
-use serde::{Deserialize, Deserializer};
+use serde::{Deserialize, Deserializer, Serialize};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 use url::Url;
@@ -8,7 +8,7 @@ use url::Url;
 /// This struct represents the am.toml configuration. Most properties in here
 /// are optional so that the user only specifies the ones that they want in that
 /// file.
-#[derive(Deserialize, Default)]
+#[derive(Serialize, Deserialize, Default)]
 #[serde(rename_all = "kebab-case")]
 pub struct AmConfig {
     /// The endpoints that will be scraped by the Prometheus server.
@@ -23,7 +23,7 @@ pub struct AmConfig {
     pub prometheus_scrape_interval: Option<Duration>,
 }
 
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "kebab-case")]
 pub struct Endpoint {
     /// The URL of the endpoint that will be scraped by the Prometheus server.

@@ -6,6 +6,7 @@ use std::path::PathBuf;
 use tracing::info;
 
 mod explore;
+mod init;
 pub mod start;
 pub mod system;
 pub mod update;
@@ -20,7 +21,7 @@ pub struct Application {
     /// RUST_LOG environment variable to change the log levels of other
     /// modules.
     ///
-    /// By default we will only log INFO level messages of all modules. If this
+    /// By default, we will only log INFO level messages of all modules. If this
     /// flag is enabled, then we will log the message from `am` with DEBUG
     /// level, other modules still use the INFO level.
     #[clap(long, short)]
@@ -44,6 +45,9 @@ pub enum SubCommands {
     /// Open up the existing Explorer
     Explore(explore::Arguments),
 
+    /// Create a new `am.toml` file interactively with sensible defaults
+    Init(init::Arguments),
+
     /// Open the Fiberplane discord to receive help, send suggestions or
     /// discuss various things related to Autometrics and the `am` CLI
     Discord,
@@ -60,6 +64,7 @@ pub async fn handle_command(app: Application, config: AmConfig, mp: MultiProgres
         SubCommands::Start(args) => start::handle_command(args, config, mp).await,
         SubCommands::System(args) => system::handle_command(args, mp).await,
         SubCommands::Explore(args) => explore::handle_command(args).await,
+        SubCommands::Init(args) => init::handle_command(args).await,
         SubCommands::Discord => {
             const URL: &str = "https://discord.gg/kHtwcH8As9";
 
