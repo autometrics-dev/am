@@ -174,7 +174,7 @@ jobs:
         if: ${{ github.event_name == 'release' }}
         env:
           AM_VERSION: ${{ needs.validate-version.outputs.version }}
-          GITHUB_TOKEN: ${{ secrets.PRIVATE_GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.PRIVATE_GITHUB_TOKEN }}
         run: |
           gh workflow run update_formula.yml \
             -R autometrics-dev/homebrew-tap \
