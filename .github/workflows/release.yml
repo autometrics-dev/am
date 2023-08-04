@@ -77,11 +77,23 @@ jobs:
   publish-artifacts-docker:
     name: Build and publish multi-arch Docker image
     runs-on: ubuntu-latest
-    needs: build
+    needs: [build-artifacts, validate-version]
     steps:
       - uses: actions/checkout@v3
         with:
           submodules: recursive
+
+      - name: Download am artifacts
+        uses: actions/download-artifact@v3
+        with:
+          path: artifacts
+
+      - name: Prepare files
+        run: |
+          mkdir -p build/linux/{amd64,arm64v8}/
+          mv artifacts/am-linux-x86_64/am build/linux/amd64/am
+          mv artifacts/am-linux-aarch64/am build/linux/arm64v8/am
+          chmod u+x build/linux/{amd64,arm64v8}/am
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v2
@@ -92,16 +104,20 @@ jobs:
       - name: Login to Docker Hub
         uses: docker/login-action@v2
         with:
-          username: fiberplane
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Build and push to Docker Hub
         uses: docker/build-push-action@v4
         with:
-          context: .
-          platforms: linux/amd64,linux/arm64
+          file: Dockerfile.release
+          context: build
+          platforms: linux/amd64,linux/arm64v8
           push: true
-          tags: fiberplane/am:latest
+          tags: |
+            fiberplane/am:${{ needs.validate-version.outputs.version }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
   finalize-release:
     name: Upload artifacts, trigger homebrew workflow
