@@ -1,0 +1,20 @@
+# Create a release image based on Debian with support for multiple architectures
+# Use the context that contains the am binaries in the `$OS/$ARCH/am` structure.
+# NOTE: Windows is currently not supported
+
+FROM ${TARGETARCH}/debian:bookworm-slim
+
+# These variables _should_ be set by docker buildx
+ARG TARGETARCH
+ARG TARGETOS
+
+RUN apt-get update \
+    && apt-get install -y --force-yes --no-install-recommends ca-certificates \
+    && apt-get clean \
+    && apt-get autoremove \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY ${TARGETOS}/${TARGETARCH}/am /app/am
+
+WORKDIR "/app/"
+ENTRYPOINT ["/app/am"]

@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   if a custom one is specified with `--listen-address` (#112)
 - The generated Prometheus config now gets stored in a unique, temporary location (#113)
 - Added new subcommand `init` to create a config file interactively (#117)
+- `am` is now available as a multi-arch Docker container on [Docker Hub](https://hub.docker.com/repository/docker/fiberplane/am/general) (#118)
 
 ## [0.2.1]
 
