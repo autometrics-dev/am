@@ -115,7 +115,7 @@ jobs:
           platforms: linux/amd64,linux/arm64v8
           push: true
           tags: |
-            fiberplane/am:${{ needs.validate-version.outputs.version }}
+            fiberplane/am:v${{ needs.validate-version.outputs.version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
