@@ -187,4 +187,6 @@ jobs:
       - name: Trigger the CLI reference docs update
         env:
           GH_TOKEN: ${{ secrets.PRIVATE_GITHUB_TOKEN }}
-        run: gh workflow run update_cli_reference.yml -R autometrics-dev/docs
+        run: |
+          gh workflow run update-cli-reference.yml \
+            -R autometrics-dev/docs
