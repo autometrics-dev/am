@@ -1,3 +1,5 @@
+# Checklist
+
 - [ ] Update version in Cargo.toml and Cargo.lock
 - [ ] Set version in the CHANGELOG.md
 
