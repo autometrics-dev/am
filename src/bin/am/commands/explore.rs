@@ -10,7 +10,7 @@ pub struct Arguments {
     prometheus_endpoint: Option<Url>,
 
     /// Which endpoint to open in the browser
-    #[clap(long, env, default_value = "http://localhost:6789/explorer")]
+    #[clap(long, env, default_value = "https://explorer.autometrics.dev/")]
     explorer_endpoint: Url,
 }
 
