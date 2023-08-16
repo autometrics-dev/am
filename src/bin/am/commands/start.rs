@@ -17,13 +17,14 @@ use std::fs::File;
 use std::io::{Seek, SeekFrom};
 use std::net::SocketAddr;
 use std::path::Path;
+use std::process::Stdio;
 use std::time::Duration;
 use std::{env, fs, vec};
 use tempfile::NamedTempFile;
 use tokio::sync::watch;
 use tokio::sync::watch::Receiver;
 use tokio::{process, select};
-use tracing::{debug, info, warn};
+use tracing::{debug, error, info, warn};
 use url::Url;
 
 // Create a reqwest client that will be used to make HTTP requests. This allows
@@ -613,24 +614,32 @@ async fn start_prometheus(
         |address| address.unwrap().to_string(),
     );
 
-    let mut child = process::Command::new(prometheus_path)
+    let child = process::Command::new(prometheus_path)
         .arg(format!("--config.file={}", config_file_path.display()))
         .arg("--web.listen-address=:9090")
         .arg("--web.enable-lifecycle")
         .arg(format!(
             "--web.external-url=http://{external_url}/prometheus"
         ))
-        .stdin(std::process::Stdio::null())
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
         .current_dir(&work_dir)
         .spawn()
-        .context("Unable to start Prometheus")?;
+        .context("Unable to start Prometheus")?
+        .wait_with_output()
+        .await?;
 
-    let status = child.wait().await?;
+    if !child.status.success() {
+        if child.stdout.len() > 0 {
+            error!("Prometheus stdout:\n{}", String::from_utf8(child.stdout)?);
+        }
 
-    if !status.success() {
-        bail!("Prometheus exited with status {}", status)
+        if child.stderr.len() > 0 {
+            error!("Prometheus stderr:\n{}", String::from_utf8(child.stderr)?);
+        }
+
+        bail!("Prometheus exited with status {}", child.status)
     }
 
     Ok(())
@@ -651,22 +660,30 @@ async fn start_pushgateway(
     );
 
     info!("Starting Pushgateway");
-    let mut child = process::Command::new(pushgateway_path.join("pushgateway"))
+    let child = process::Command::new(pushgateway_path.join("pushgateway"))
         .arg("--web.listen-address=:9091")
         .arg(format!(
             "--web.external-url=http://{external_url}/pushgateway"
         ))
-        .stdin(std::process::Stdio::null())
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
         .current_dir(&work_dir)
         .spawn()
-        .context("Unable to start Pushgateway")?;
+        .context("Unable to start Pushgateway")?
+        .wait_with_output()
+        .await?;
 
-    let status = child.wait().await?;
+    if !child.status.success() {
+        if child.stdout.len() > 0 {
+            error!("Pushgateway stdout:\n{}", String::from_utf8(child.stdout)?);
+        }
 
-    if !status.success() {
-        bail!("Pushgateway exited with status {}", status)
+        if child.stderr.len() > 0 {
+            error!("Pushgateway stderr:\n{}", String::from_utf8(child.stderr)?);
+        }
+
+        bail!("Pushgateway exited with status {}", child.status)
     }
 
     Ok(())
