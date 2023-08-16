@@ -631,11 +631,11 @@ async fn start_prometheus(
         .await?;
 
     if !child.status.success() {
-        if child.stdout.len() > 0 {
+        if !child.stdout.is_empty() {
             error!("Prometheus stdout:\n{}", String::from_utf8(child.stdout)?);
         }
 
-        if child.stderr.len() > 0 {
+        if !child.stderr.is_empty() {
             error!("Prometheus stderr:\n{}", String::from_utf8(child.stderr)?);
         }
 
@@ -675,11 +675,11 @@ async fn start_pushgateway(
         .await?;
 
     if !child.status.success() {
-        if child.stdout.len() > 0 {
+        if !child.stdout.is_empty() {
             error!("Pushgateway stdout:\n{}", String::from_utf8(child.stdout)?);
         }
 
-        if child.stderr.len() > 0 {
+        if !child.stderr.is_empty() {
             error!("Pushgateway stderr:\n{}", String::from_utf8(child.stderr)?);
         }
 
