@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- Dump logs if prometheus or pushgateway return a non 0 exit code (#122)
 
 ## [0.3.0]
 
