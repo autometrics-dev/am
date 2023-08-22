@@ -43,6 +43,7 @@ pub enum SubCommands {
     System(system::Arguments),
 
     /// Open up the existing Explorer
+    #[clap(alias = "explorer")]
     Explore(explore::Arguments),
 
     /// Create a new `am.toml` file interactively with sensible defaults
