@@ -28,7 +28,7 @@ humantime-serde = "1.1.1"
 include_dir = { version = "0.7.3" }
 indicatif = "0.17.5"
 itertools = "0.11.0"
-octocrab = "0.25.0"
+octocrab = "0.29.3"
 once_cell = { version = "1.17.1" }
 open = "4.1.0"
 rand = "0.8.5"
