@@ -90,10 +90,10 @@ jobs:
 
       - name: Prepare files
         run: |
-          mkdir -p build/linux/{amd64,arm64v8}/
+          mkdir -p build/linux/{amd64,arm64}/
           mv artifacts/am-linux-x86_64/am build/linux/amd64/am
-          mv artifacts/am-linux-aarch64/am build/linux/arm64v8/am
-          chmod u+x build/linux/{amd64,arm64v8}/am
+          mv artifacts/am-linux-aarch64/am build/linux/arm64/am
+          chmod u+x build/linux/{amd64,arm64}/am
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v2
@@ -112,7 +112,7 @@ jobs:
         with:
           file: Dockerfile.release
           context: build
-          platforms: linux/amd64,linux/arm64v8
+          platforms: linux/amd64,linux/arm64/v8
           push: true
           tags: |
             fiberplane/am:v${{ needs.validate-version.outputs.version }}

@@ -2,7 +2,7 @@
 # Use the context that contains the am binaries in the `$OS/$ARCH/am` structure.
 # NOTE: Windows is currently not supported
 
-FROM ${TARGETARCH}/debian:bookworm-slim
+FROM debian:bookworm-slim
 
 # These variables _should_ be set by docker buildx
 ARG TARGETARCH
