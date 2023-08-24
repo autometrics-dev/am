@@ -116,6 +116,7 @@ jobs:
           push: true
           tags: |
             fiberplane/am:v${{ needs.validate-version.outputs.version }}
+            fiberplane/am:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
