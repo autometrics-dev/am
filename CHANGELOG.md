@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0]
+
 - SHA-256 checksums are now provided for all artifact downloads (#101)
 - Added self updater (#102)
 - Use `clap-markdown` fork that enables formatting by display name (#103)
@@ -15,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The generated Prometheus config now gets stored in a unique, temporary location (#113)
 - Added new subcommand `init` to create a config file interactively (#117)
 - `am` is now available as a multi-arch Docker container on [Docker Hub](https://hub.docker.com/repository/docker/fiberplane/am/general) (#118)
+- Fix multiarch docker image for arm64 users (#125)
 
 ## [0.2.1]
 
