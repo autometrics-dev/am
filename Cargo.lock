@@ -328,7 +328,7 @@ dependencies = [
 [[package]]
 name = "clap-markdown"
 version = "0.1.3"
-source = "git+https://github.com/keturiosakys/clap-markdown.git#0ec2efed4cf6f1f911000c7cd1b2389e0b628971"
+source = "git+https://github.com/keturiosakys/clap-markdown.git#0361f85add9cbe87462773406c08b31df6a94f3f"
 dependencies = [
  "clap",
 ]
