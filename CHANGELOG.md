@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Change the default explorer endpoint of when using `am explorer` (#120)
 - Update all depdencies (#124)
 - Fix multiarch docker image for arm64 users (#125)
+- Update markdown reference generator command to disable TOC (#127)
 
 ## [0.3.0]
 

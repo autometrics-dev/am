@@ -145,8 +145,12 @@ pub(crate) async fn update_check() {
         return;
     }
 
-    let Ok(release) = latest_release().await else { return };
-    let Ok(needs_update) = update_needed(&release) else { return };
+    let Ok(release) = latest_release().await else {
+        return;
+    };
+    let Ok(needs_update) = update_needed(&release) else {
+        return;
+    };
 
     if let Err(err) = OpenOptions::new()
         .create(true)
