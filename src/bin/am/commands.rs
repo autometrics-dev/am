@@ -12,7 +12,7 @@ pub mod system;
 pub mod update;
 
 #[derive(Parser)]
-#[command(author, version, about, long_about = None, display_name = "am")]
+#[command(author, version, about, long_about = None, bin_name = "am")]
 pub struct Application {
     #[command(subcommand)]
     pub command: SubCommands,
@@ -77,7 +77,8 @@ pub async fn handle_command(app: Application, config: AmConfig, mp: MultiProgres
         }
         SubCommands::Update(args) => update::handle_command(args, mp).await,
         SubCommands::MarkdownHelp => {
-            clap_markdown::print_help_markdown::<Application>();
+            let disable_toc = true;
+            clap_markdown::print_help_markdown::<Application>(Some(disable_toc));
             Ok(())
         }
     }
