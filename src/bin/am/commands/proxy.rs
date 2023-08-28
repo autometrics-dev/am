@@ -50,7 +50,8 @@ pub async fn handle_command(args: CliArguments) -> Result<()> {
     let (tx, _) = watch::channel(None);
 
     // Start web server for hosting the explorer, am api and proxies to the enabled services.
-    let web_server_task = async move { start_web_server(&args.listen_address, false, tx).await };
+    let web_server_task =
+        async move { start_web_server(&args.listen_address, false, false, tx).await };
 
     select! {
         biased;
@@ -69,4 +70,3 @@ pub async fn handle_command(args: CliArguments) -> Result<()> {
         }
     }
 }
-

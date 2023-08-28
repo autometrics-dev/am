@@ -6,8 +6,8 @@ use std::path::PathBuf;
 use tracing::info;
 
 mod explore;
-mod proxy;
 mod init;
+mod proxy;
 pub mod start;
 pub mod system;
 pub mod update;
@@ -48,7 +48,6 @@ pub enum SubCommands {
     Explore(explore::Arguments),
 
     /// Use am as a proxy to another prometheus instance
-    #[clap(alias = "proxy")]
     Proxy(proxy::CliArguments),
 
     /// Create a new `am.toml` file interactively with sensible defaults
