@@ -72,7 +72,7 @@ pub(crate) async fn start_web_server(
                 // 4. Replace the request's URI with the modified URI.
                 *req.uri_mut() = new_uri;
             }
-            async move { prometheus::handler_with_url(req, &*upstream_base).await }
+            async move { prometheus::handler_with_url(req, &upstream_base).await }
         };
 
         app = app
