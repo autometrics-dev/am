@@ -40,6 +40,7 @@ pub(crate) async fn start_web_server(
         .route("/explorer/", get(explorer::handler))
         .route("/explorer/*path", get(explorer::handler));
 
+    // Proxy `/prometheus` to the upstream (local) prometheus instance
     if should_enable_prometheus {
         app = app
             .route("/prometheus/*path", any(prometheus::handler))
@@ -50,8 +51,10 @@ pub(crate) async fn start_web_server(
     if is_proxying_prometheus {
         let prometheus_upstream_base = Arc::new(prometheus_proxy_url.clone().unwrap());
 
+        // Define a handler that will proxy to an external Prometheus instance
         let handler = move |mut req: http::Request<Body>| {
             let upstream_base = prometheus_upstream_base.clone();
+            // 1. Get the path and query from the request, since we need to strip out `/prometheus`
             let path_and_query = req
                 .uri()
                 .path_and_query()
