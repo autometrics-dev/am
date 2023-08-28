@@ -6,6 +6,7 @@ use std::net::SocketAddr;
 use tokio::select;
 use tokio::sync::watch;
 use tracing::info;
+use url::Url;
 
 #[derive(Parser, Clone)]
 pub struct CliArguments {
@@ -20,17 +21,24 @@ pub struct CliArguments {
         alias = "explorer-address"
     )]
     listen_address: SocketAddr,
+
+    /// The url to which we should proxy requests to `/prometheus`
+    ///
+    #[clap(long, env, alias = "prometheus-address")]
+    prometheus_url: Option<Url>,
 }
 
 #[derive(Debug, Clone)]
 struct Arguments {
     listen_address: SocketAddr,
+    prometheus_url: Option<Url>,
 }
 
 impl Arguments {
     fn new(args: CliArguments) -> Self {
         Arguments {
             listen_address: args.listen_address,
+            prometheus_url: args.prometheus_url,
         }
     }
 }
@@ -50,8 +58,9 @@ pub async fn handle_command(args: CliArguments) -> Result<()> {
     let (tx, _) = watch::channel(None);
 
     // Start web server for hosting the explorer, am api and proxies to the enabled services.
-    let web_server_task =
-        async move { start_web_server(&args.listen_address, false, false, tx).await };
+    let web_server_task = async move {
+        start_web_server(&args.listen_address, false, false, args.prometheus_url, tx).await
+    };
 
     select! {
         biased;
