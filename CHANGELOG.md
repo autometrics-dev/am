@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix multiarch docker image for arm64 users (#125)
 - Update markdown reference generator command to disable TOC (#127)
 - Add `am proxy` command (#128)
+- Update more dependencies (#130)
 
 ## [0.3.0]
 
