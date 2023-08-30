@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Update markdown reference generator command to disable TOC (#127)
 - Add `am proxy` command (#128)
 - Update more dependencies (#130)
+- Include `am_list` crate inside the workspace, and add the function listing feature (#131)
 
 ## [0.3.0]
 

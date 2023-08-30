@@ -7,6 +7,7 @@ use tracing::info;
 
 mod explore;
 mod init;
+mod list;
 mod proxy;
 pub mod start;
 pub mod system;
@@ -60,6 +61,9 @@ pub enum SubCommands {
     /// Run the updater
     Update(update::Arguments),
 
+    /// List the functions in a project
+    List(list::Arguments),
+
     #[clap(hide = true)]
     MarkdownHelp,
 }
@@ -81,6 +85,7 @@ pub async fn handle_command(app: Application, config: AmConfig, mp: MultiProgres
             Ok(())
         }
         SubCommands::Update(args) => update::handle_command(args, mp).await,
+        SubCommands::List(args) => list::handle_command(args),
         SubCommands::MarkdownHelp => {
             let disable_toc = true;
             clap_markdown::print_help_markdown::<Application>(Some(disable_toc));
