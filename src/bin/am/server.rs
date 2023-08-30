@@ -61,9 +61,10 @@ pub(crate) async fn start_web_server(
                 .map(|pq| pq.as_str())
                 .unwrap_or("");
             if let Some(stripped_path) = path_and_query.strip_prefix("/prometheus") {
+                let stripped_path_str = stripped_path.to_string();
                 // 2. Remove the `/prometheus` prefix.
                 let new_path_and_query =
-                    http::uri::PathAndQuery::from_maybe_shared(stripped_path.to_string())
+                    http::uri::PathAndQuery::from_maybe_shared(stripped_path_str)
                         .expect("Invalid path");
 
                 // 3. Create a new URI with the modified path.
