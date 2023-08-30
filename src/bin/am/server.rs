@@ -54,28 +54,46 @@ pub(crate) async fn start_web_server(
         // Define a handler that will proxy to an external Prometheus instance
         let handler = move |mut req: http::Request<Body>| {
             let upstream_base = prometheus_upstream_base.clone();
-            // 1. Get the path and query from the request, since we need to strip out `/prometheus`
-            let path_and_query = req
-                .uri()
-                .path_and_query()
-                .map(|pq| pq.as_str())
-                .unwrap_or("");
-            if let Some(stripped_path) = path_and_query.strip_prefix("/prometheus") {
-                // 2. Remove the `/prometheus` prefix.
-                let new_path_and_query =
-                    http::uri::PathAndQuery::from_maybe_shared(stripped_path.to_string())
-                        .expect("Invalid path");
+            async move {
+                // Clone necessary parts of the request
+                // 1. Get the path and query from the request, since we need to strip out `/prometheus`
+                let uri = req.uri().clone();
+                let path_and_query = uri.path_and_query().map(|pq| pq.as_str()).unwrap_or("");
+                if let Some(stripped_path) = path_and_query.strip_prefix("/prometheus") {
+                    // 2. Remove the `/prometheus` prefix.
+                    let new_path_and_query =
+                        http::uri::PathAndQuery::from_maybe_shared(stripped_path)
+                            .expect("Invalid path");
 
-                // 3. Create a new URI with the modified path.
-                let mut new_uri_parts = req.uri().clone().into_parts();
-                new_uri_parts.path_and_query = Some(new_path_and_query);
+                    // 3. Create a new URI with the modified path.
+                    let mut new_uri_parts = req.uri().clone().into_parts();
+                    new_uri_parts.path_and_query = Some(new_path_and_query);
 
-                let new_uri = http::Uri::from_parts(new_uri_parts).expect("Invalid URI");
+                    let new_uri = http::Uri::from_parts(new_uri_parts).expect("Invalid URI");
 
-                // 4. Replace the request's URI with the modified URI.
-                *req.uri_mut() = new_uri;
+                    // Clone the necessary parts of the request
+                    // 4. Replace the request's URI with the modified URI.
+
+                    let mut cloned_req = http::Request::new(Body::empty());
+                    *cloned_req.method_mut() = req.method().clone();
+                    *cloned_req.uri_mut() = http::Uri::builder()
+                        .path_and_query(new_path_and_query)
+                        .build()
+                        .expect("Invalid URI");
+                    *cloned_req.headers_mut() = req.headers().clone();
+
+                    prometheus::handler_with_url(cloned_req, &upstream_base).await
+                } else {
+                    prometheus::handler_with_url(req, &upstream_base).await
+                }
+
+                // let mut req = http::Request::new(Body::empty());
+                // *req.method_mut() = Method::GET;
+                // *req.uri_mut() = new_uri;
+                // *req.headers_mut() = headers;
+
+                // Use the cloned URI
             }
-            async move { prometheus::handler_with_url(req, &upstream_base).await }
         };
 
         app = app
