@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0]
+
 - Dump logs if prometheus or pushgateway return a non 0 exit code (#122)
 - Change the default explorer endpoint of when using `am explorer` (#120)
 - Update all depdencies (#124)
