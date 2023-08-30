@@ -22,8 +22,7 @@ pub struct CliArguments {
     )]
     listen_address: SocketAddr,
 
-    /// The url to which we should proxy requests to `/prometheus`
-    ///
+    /// The upstream Prometheus URL
     #[clap(long, env, alias = "prometheus-address")]
     prometheus_url: Option<Url>,
 }
