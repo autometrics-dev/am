@@ -7,6 +7,7 @@ use tracing::info;
 
 mod explore;
 mod init;
+mod proxy;
 pub mod start;
 pub mod system;
 pub mod update;
@@ -46,6 +47,9 @@ pub enum SubCommands {
     #[clap(alias = "explorer")]
     Explore(explore::Arguments),
 
+    /// Use am as a proxy to another prometheus instance
+    Proxy(proxy::CliArguments),
+
     /// Create a new `am.toml` file interactively with sensible defaults
     Init(init::Arguments),
 
@@ -65,6 +69,7 @@ pub async fn handle_command(app: Application, config: AmConfig, mp: MultiProgres
         SubCommands::Start(args) => start::handle_command(args, config, mp).await,
         SubCommands::System(args) => system::handle_command(args, mp).await,
         SubCommands::Explore(args) => explore::handle_command(args).await,
+        SubCommands::Proxy(args) => proxy::handle_command(args).await,
         SubCommands::Init(args) => init::handle_command(args).await,
         SubCommands::Discord => {
             const URL: &str = "https://discord.gg/kHtwcH8As9";

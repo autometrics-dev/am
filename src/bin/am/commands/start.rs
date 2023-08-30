@@ -261,8 +261,16 @@ pub async fn handle_command(args: CliArguments, config: AmConfig, mp: MultiProgr
     let (tx, rx) = watch::channel(None);
 
     // Start web server for hosting the explorer, am api and proxies to the enabled services.
-    let web_server_task =
-        async move { start_web_server(&args.listen_address, args.pushgateway_enabled, tx).await };
+    let web_server_task = async move {
+        start_web_server(
+            &args.listen_address,
+            true,
+            args.pushgateway_enabled,
+            None,
+            tx,
+        )
+        .await
+    };
 
     // Start Prometheus server
     let prometheus_args = args.clone();
