@@ -4,10 +4,16 @@ mod roots;
 pub mod rust;
 pub mod typescript;
 
+use log::info;
 pub use roots::find_project_roots;
 
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, fmt::Display, path::Path, str::FromStr};
+use std::{
+    collections::{BTreeMap, HashMap},
+    fmt::Display,
+    path::{Path, PathBuf},
+    str::FromStr,
+};
 use thiserror::Error;
 use tree_sitter::{LanguageError, QueryError};
 
@@ -189,9 +195,10 @@ pub enum AmlError {
 }
 
 /// Languages supported by `am_list`.
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Language {
     Rust,
+    #[serde(rename = "Golang")]
     Go,
     Typescript,
     Python,
@@ -231,4 +238,48 @@ impl std::fmt::Display for Language {
             Language::Python => write!(f, "Python"),
         }
     }
+}
+
+pub fn list_all_project_functions(
+    root: &Path,
+) -> Result<BTreeMap<PathBuf, (Language, Vec<FunctionInfo>)>> {
+    let projects = find_project_roots(root)?;
+    let mut res: BTreeMap<PathBuf, (Language, Vec<FunctionInfo>)> = BTreeMap::new();
+
+    // TODO: try to parallelize this loop if possible
+    for (path, language) in projects.iter() {
+        info!(
+            "Listing functions in {} (Language: {})",
+            path.display(),
+            language
+        );
+        let project_fns = list_single_project_functions(path, *language, true)?;
+
+        res.entry(path.to_path_buf())
+            .or_insert_with(|| (*language, Vec::new()))
+            .1
+            .extend(project_fns);
+    }
+
+    Ok(res)
+}
+
+pub fn list_single_project_functions(
+    root: &Path,
+    language: Language,
+    all_functions: bool,
+) -> Result<Vec<FunctionInfo>> {
+    let mut implementor: Box<dyn ListAmFunctions> = match language {
+        Language::Rust => Box::new(crate::rust::Impl {}),
+        Language::Go => Box::new(crate::go::Impl {}),
+        Language::Typescript => Box::new(crate::typescript::Impl {}),
+        Language::Python => Box::new(crate::python::Impl {}),
+    };
+    let mut res = if all_functions {
+        implementor.list_all_functions(root)?
+    } else {
+        implementor.list_autometrics_functions(root)?
+    };
+    res.sort();
+    Ok(res)
 }

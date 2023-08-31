@@ -11,8 +11,6 @@ license.workspace = true
 
 [dependencies]
 anyhow = "1.0.71"
-clap = { version = "4.3.0", features = ["derive"] }
-flexi_logger = { version = "0.25.5", features = ["colors"] }
 itertools = "0.11.0"
 log = "0.4.18"
 rayon = "1.7.0"

@@ -1,9 +1,6 @@
-use am_list::{FunctionInfo, Language, ListAmFunctions};
+use am_list::Language;
 use clap::{Args, Subcommand};
-use std::{
-    collections::BTreeMap,
-    path::{Path, PathBuf},
-};
+use std::path::PathBuf;
 use tracing::info;
 
 // TODO(gagbo): add an additional subcommand that makes use of am_list::find_roots to
@@ -70,22 +67,7 @@ pub fn handle_command(args: Arguments) -> anyhow::Result<()> {
 fn handle_all_projects(args: AllProjects) -> Result<(), anyhow::Error> {
     let root = args.root;
     info!("Listing functions in {}:", root.display());
-    let projects = am_list::find_project_roots(&root)?;
-    let mut res: BTreeMap<String, Vec<FunctionInfo>> = BTreeMap::new();
-
-    // TODO: try to parallelize this loop if possible
-    for (path, language) in projects.iter() {
-        info!(
-            "Listing functions in {} (Language: {})",
-            path.display(),
-            language
-        );
-        let project_fns = list_single_project_functions(path, *language, true)?;
-
-        res.entry(path.to_string_lossy().to_string())
-            .or_default()
-            .extend(project_fns);
-    }
+    let res = am_list::list_all_project_functions(&root)?;
 
     if args.pretty {
         println!("{}", serde_json::to_string_pretty(&res)?);
@@ -94,7 +76,7 @@ fn handle_all_projects(args: AllProjects) -> Result<(), anyhow::Error> {
     }
     info!(
         "Total: {} functions",
-        res.values().map(|list| list.len()).sum::<usize>()
+        res.values().map(|list| list.1.len()).sum::<usize>()
     );
 
     Ok(())
@@ -104,7 +86,7 @@ fn handle_single_project(args: SingleProject) -> Result<(), anyhow::Error> {
     let root = args.root;
     info!("Autometrics functions in {}:", root.display());
 
-    let res = list_single_project_functions(&root, args.language, args.all_functions)?;
+    let res = am_list::list_single_project_functions(&root, args.language, args.all_functions)?;
 
     if args.pretty {
         println!("{}", serde_json::to_string_pretty(&res)?);
@@ -114,24 +96,4 @@ fn handle_single_project(args: SingleProject) -> Result<(), anyhow::Error> {
     info!("Total: {} functions", res.len());
 
     Ok(())
-}
-
-fn list_single_project_functions(
-    root: &Path,
-    language: Language,
-    all_functions: bool,
-) -> Result<Vec<FunctionInfo>, anyhow::Error> {
-    let mut implementor: Box<dyn ListAmFunctions> = match language {
-        Language::Rust => Box::new(am_list::rust::Impl {}),
-        Language::Go => Box::new(am_list::go::Impl {}),
-        Language::Typescript => Box::new(am_list::typescript::Impl {}),
-        Language::Python => Box::new(am_list::python::Impl {}),
-    };
-    let mut res = if all_functions {
-        implementor.list_all_functions(root)?
-    } else {
-        implementor.list_autometrics_functions(root)?
-    };
-    res.sort();
-    Ok(res)
 }
