@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1]
+
+- Change Docker Hub organization to `autometrics` (#133)
+
 ## [0.4.0]
 
 - Dump logs if prometheus or pushgateway return a non 0 exit code (#122)
