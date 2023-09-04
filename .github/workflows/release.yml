@@ -115,8 +115,8 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
-            fiberplane/am:v${{ needs.validate-version.outputs.version }}
-            fiberplane/am:latest
+            autometrics/am:v${{ needs.validate-version.outputs.version }}
+            autometrics/am:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
