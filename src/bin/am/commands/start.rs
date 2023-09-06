@@ -629,6 +629,7 @@ async fn start_prometheus(
         .arg(format!(
             "--web.external-url=http://{external_url}/prometheus"
         ))
+        .arg("--web.enable-remote-write-receiver")
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
