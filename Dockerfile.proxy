@@ -2,6 +2,10 @@
 # Use the context that contains the am binaries in the `$OS/$ARCH/am` structure.
 # NOTE: Windows is currently not supported
 
+# This image comes with some differences in that it will run the proxy command
+# by default and it will also ensure that the proxy is listening on all
+# addresses.
+
 FROM debian:bookworm-slim
 
 # These variables _should_ be set by docker buildx
@@ -16,6 +20,8 @@ RUN apt-get update \
 
 COPY ${TARGETOS}/${TARGETARCH}/am /app/am
 
+ENV LISTEN_ADDRESS="0.0.0.0.6789"
+
 EXPOSE 6789
 WORKDIR "/app/"
-ENTRYPOINT ["/app/am"]
+ENTRYPOINT ["/app/am", "proxy"]
