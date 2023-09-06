@@ -12,6 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.4.1]
 
 - Change Docker Hub organization to `autometrics` (#133)
+- Add documentation about running `am` in a container (#135)
+- Publish a container optimized for `am proxy` (#135)
 
 ## [0.4.0]
 
