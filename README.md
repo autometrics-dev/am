@@ -5,7 +5,6 @@ local Prometheus environment and inspect the metrics using the explorer.
 
 [![Discord Shield](https://discordapp.com/api/guilds/950489382626951178/widget.png?style=shield)](https://discord.gg/kHtwcH8As9)
 
-![The Autometrics Explorer](./assets/am-explorer.png)
 
 ## Features
 
@@ -13,9 +12,11 @@ local Prometheus environment and inspect the metrics using the explorer.
     - Prometheus - this will scrape, store and expose the metrics data
     - Pushgateway - allow for pushing metrics from batch jobs or short-lived
       processes
-    - Grafana (coming soon!)
+    - OTEL collector (coming soon!)
 - Visualize your metrics using the explorer
-- Inspect your Service Level Objectives (coming soon!)
+- Inspect your Service Level Objectives
+
+![The Autometrics Explorer](./assets/am-explorer.png)
 
 ## Getting started
 
@@ -53,6 +54,10 @@ am start :3000 :3030
 Now you can visualize and inspect your metrics using the explorer by visiting `http://localhost:6789/`.
 
 ![The Autometrics Explorer](./assets/explorer.png)
+
+### Container
+
+We provide a container that packages `am`. For more details see [docs/container.md](docs/container.md).
 
 ## Documentation
 

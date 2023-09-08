@@ -120,6 +120,19 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Build and push to Docker Hub
+        uses: docker/build-push-action@v4
+        with:
+          file: Dockerfile.proxy
+          context: build
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            autometrics/am-proxy:v${{ needs.validate-version.outputs.version }}
+            autometrics/am-proxy:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
   finalize-release:
     name: Upload artifacts, trigger homebrew workflow
     needs: [build-artifacts, validate-version]
