@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0]
+
 - The Prometheus write endpoint is now enabled by default (#136)
 - Include `am_list` crate inside the workspace, and add the function listing feature (#131)
 
