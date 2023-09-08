@@ -1,0 +1,28 @@
+[package]
+name = "am_list"
+description = "A tree-sitter-powered command line tool to list functions marked with Autometrics annotations"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+documentation.workspace = true
+repository.workspace = true
+homepage.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow = "1.0.71"
+itertools = "0.11.0"
+log = "0.4.18"
+rayon = "1.7.0"
+serde = { version = "1.0.163", features = ["derive"] }
+serde_json = "1.0.96"
+thiserror = "1.0.40"
+tree-sitter = "0.20.10"
+tree-sitter-go = "0.19.1"
+tree-sitter-python = "0.20.2"
+tree-sitter-rust = "0.20.3"
+tree-sitter-typescript = "0.20.2"
+walkdir = "2.3.3"
+
+[dev-dependencies]
+pretty_assertions = "1.3.0"
