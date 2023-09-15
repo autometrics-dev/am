@@ -21,9 +21,7 @@ pub(crate) async fn all_functions() -> Result<impl IntoResponse, AllFunctionErro
 
             // this is in a separate block so the mutable reference gets dropped before we try to move the value in the last line
             {
-                let obj = value
-                    .as_object_mut()
-                    .ok_or(AllFunctionError::NonObject)?;
+                let obj = value.as_object_mut().ok_or(AllFunctionError::NonObject)?;
 
                 obj.insert(
                     "language".to_string(),
