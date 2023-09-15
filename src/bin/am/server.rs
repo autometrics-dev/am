@@ -10,6 +10,7 @@ use tracing::{debug, info};
 use url::Url;
 
 mod explorer;
+mod functions;
 mod prometheus;
 mod pushgateway;
 mod util;
@@ -38,7 +39,8 @@ pub(crate) async fn start_web_server(
             }),
         )
         .route("/explorer/", get(explorer::handler))
-        .route("/explorer/*path", get(explorer::handler));
+        .route("/explorer/*path", get(explorer::handler))
+        .route("/api/functions", get(functions::all_functions));
 
     // Proxy `/prometheus` to the upstream (local) prometheus instance
     if should_enable_prometheus {
