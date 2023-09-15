@@ -23,11 +23,11 @@ pub(crate) async fn all_functions() -> Result<impl IntoResponse, AllFunctionErro
             {
                 let obj = value
                     .as_object_mut()
-                    .ok_or_else(|| AllFunctionError::NonObject)?;
+                    .ok_or(AllFunctionError::NonObject)?;
 
                 obj.insert(
                     "language".to_string(),
-                    serde_json::to_value(&language).map_err(|_| AllFunctionError::SerdeError)?,
+                    serde_json::to_value(language).map_err(|_| AllFunctionError::SerdeError)?,
                 );
 
                 obj.insert(
