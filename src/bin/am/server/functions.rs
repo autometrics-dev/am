@@ -45,7 +45,7 @@ pub(crate) async fn all_functions() -> Result<impl IntoResponse, AllFunctionErro
 #[derive(Deserialize, Serialize, Debug, Error)]
 #[serde(tag = "error", content = "details", rename_all = "snake_case")]
 pub(crate) enum AllFunctionError {
-    #[error("`FunctionInfo` needs to serializhe to a `Value::Object`")]
+    #[error("`FunctionInfo` needs to serialize to a `Value::Object`")]
     NonObject,
 
     #[error("unable to determinate current working directory")]
