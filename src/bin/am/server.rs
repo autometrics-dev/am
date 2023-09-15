@@ -9,6 +9,7 @@ use tokio::sync::watch::Sender;
 use tracing::{debug, info};
 use url::Url;
 
+mod assets;
 mod explorer;
 mod prometheus;
 mod pushgateway;
@@ -38,6 +39,7 @@ pub(crate) async fn start_web_server(
             }),
         )
         .route("/explorer/", get(explorer::handler))
+        .route("/explorer/static/*path", get(assets::handler))
         .route("/explorer/*path", get(explorer::handler));
 
     // Proxy `/prometheus` to the upstream (local) prometheus instance
