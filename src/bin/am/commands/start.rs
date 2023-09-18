@@ -96,6 +96,14 @@ pub struct CliArguments {
     )]
     pushgateway_version: String,
 
+    #[clap(
+        long,
+        env,
+        default_value = "https://explorer.autometrics.dev/static",
+        help_heading = "Location for static assets used by the explorer"
+    )]
+    static_assets_url: Url,
+
     /// Whenever to clean up files created by Prometheus/Pushgateway after successful execution
     #[clap(short = 'd', long, env)]
     ephemeral: bool,
@@ -115,6 +123,7 @@ struct Arguments {
     pushgateway_version: String,
     ephemeral_working_directory: bool,
     no_rules: bool,
+    static_assets_url: Url,
 }
 
 impl Arguments {
@@ -137,6 +146,7 @@ impl Arguments {
                 .or(config.prometheus_scrape_interval)
                 .unwrap_or_else(|| Duration::from_secs(5)),
             no_rules: args.no_rules,
+            static_assets_url: args.static_assets_url,
         }
     }
 }
@@ -260,6 +270,7 @@ pub async fn handle_command(args: CliArguments, config: AmConfig, mp: MultiProgr
 
     let (tx, rx) = watch::channel(None);
 
+    let static_assets_url = args.static_assets_url.clone();
     // Start web server for hosting the explorer, am api and proxies to the enabled services.
     let web_server_task = async move {
         start_web_server(
@@ -267,6 +278,7 @@ pub async fn handle_command(args: CliArguments, config: AmConfig, mp: MultiProgr
             true,
             args.pushgateway_enabled,
             None,
+            static_assets_url,
             tx,
         )
         .await

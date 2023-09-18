@@ -20,10 +20,12 @@ pub(crate) async fn start_web_server(
     enable_prometheus: bool,
     enable_pushgateway: bool,
     prometheus_proxy_url: Option<Url>,
+    static_assets_url: Url,
     tx: Sender<Option<SocketAddr>>,
 ) -> Result<()> {
     let is_proxying_prometheus = prometheus_proxy_url.is_some();
     let should_enable_prometheus = enable_prometheus && !is_proxying_prometheus;
+
     let mut app = Router::new()
         // Any calls to the root should be redirected to the explorer which is most likely what the user wants to use.
         .route("/", get(|| async { Redirect::temporary("/explorer/") }))
@@ -39,7 +41,10 @@ pub(crate) async fn start_web_server(
             }),
         )
         .route("/explorer/", get(explorer::handler))
-        .route("/explorer/static/*path", get(assets::handler))
+        .route(
+            "/explorer/static/*path",
+            get(|req| async { assets::handler(req, static_assets_url).await }),
+        )
         .route("/explorer/*path", get(explorer::handler));
 
     // Proxy `/prometheus` to the upstream (local) prometheus instance

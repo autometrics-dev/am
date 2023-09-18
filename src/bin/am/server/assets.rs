@@ -3,8 +3,7 @@ use axum::body::Body;
 use axum::response::IntoResponse;
 use url::Url;
 
-pub(crate) async fn handler(mut req: http::Request<Body>) -> impl IntoResponse {
-    let upstream_base = Url::parse("https://explorer.autometrics.dev/static").unwrap();
+pub async fn handler(mut req: http::Request<Body>, upstream_base: Url) -> impl IntoResponse {
     *req.uri_mut() = req
         .uri()
         .path_and_query()
@@ -13,5 +12,5 @@ pub(crate) async fn handler(mut req: http::Request<Body>) -> impl IntoResponse {
         .replace("/explorer/static", "/static")
         .parse()
         .unwrap();
-    proxy_handler(req, upstream_base).await
+    proxy_handler(req, upstream_base.clone()).await
 }
