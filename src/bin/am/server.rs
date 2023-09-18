@@ -11,6 +11,7 @@ use url::Url;
 
 mod assets;
 mod explorer;
+mod functions;
 mod prometheus;
 mod pushgateway;
 mod util;
@@ -45,7 +46,8 @@ pub(crate) async fn start_web_server(
             "/explorer/static/*path",
             get(|req| async { assets::handler(req, static_assets_url).await }),
         )
-        .route("/explorer/*path", get(explorer::handler));
+        .route("/explorer/*path", get(explorer::handler))
+        .route("/api/functions", get(functions::all_functions));
 
     // Proxy `/prometheus` to the upstream (local) prometheus instance
     if should_enable_prometheus {
