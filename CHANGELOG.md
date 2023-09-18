@@ -6,6 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+- Proxy static assets for explorer instead of loading them directly from explorer.autometrics.dev. This url is also configurable so it is easier to use explorer hosted on a different URL
 
 ## [0.5.0]
 
