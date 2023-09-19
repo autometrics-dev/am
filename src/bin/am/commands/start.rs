@@ -99,7 +99,7 @@ pub struct CliArguments {
     #[clap(
         long,
         env,
-        default_value = "https://explorer.autometrics.dev/static",
+        default_value = "https://explorer.autometrics.dev",
         help_heading = "Location for static assets used by the explorer"
     )]
     static_assets_url: Url,

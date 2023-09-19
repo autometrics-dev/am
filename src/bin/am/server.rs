@@ -3,13 +3,15 @@ use axum::body::Body;
 use axum::response::Redirect;
 use axum::routing::{any, get};
 use axum::{Router, Server};
+use http::header::CONNECTION;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::sync::watch::Sender;
 use tracing::{debug, info};
 use url::Url;
 
-mod assets;
+use crate::server::util::proxy_handler;
+
 mod explorer;
 mod functions;
 mod prometheus;
@@ -27,6 +29,19 @@ pub(crate) async fn start_web_server(
     let is_proxying_prometheus = prometheus_proxy_url.is_some();
     let should_enable_prometheus = enable_prometheus && !is_proxying_prometheus;
 
+    let explorer_static_handler = move |mut req: http::Request<Body>| async move {
+        *req.uri_mut() = req
+            .uri()
+            .path_and_query()
+            .unwrap()
+            .as_str()
+            .replace("/explorer/static", "/static")
+            .parse()
+            .unwrap();
+        // Remove the connection header to prevent issues when proxying content from HTTP/2 upstreams
+        req.headers_mut().remove(CONNECTION);
+        proxy_handler(req, static_assets_url.clone()).await
+    };
     let mut app = Router::new()
         // Any calls to the root should be redirected to the explorer which is most likely what the user wants to use.
         .route("/", get(|| async { Redirect::temporary("/explorer/") }))
@@ -42,10 +57,7 @@ pub(crate) async fn start_web_server(
             }),
         )
         .route("/explorer/", get(explorer::handler))
-        .route(
-            "/explorer/static/*path",
-            get(|req| async { assets::handler(req, static_assets_url).await }),
-        )
+        .route("/explorer/static/*path", get(explorer_static_handler))
         .route("/explorer/*path", get(explorer::handler))
         .route("/api/functions", get(functions::all_functions));
 
