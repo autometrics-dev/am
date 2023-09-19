@@ -25,12 +25,21 @@ pub struct CliArguments {
     /// The upstream Prometheus URL
     #[clap(long, env, alias = "prometheus-address")]
     prometheus_url: Option<Url>,
+
+    #[clap(
+        long,
+        env,
+        default_value = "https://explorer.autometrics.dev",
+        help_heading = "Location for static assets used by the explorer"
+    )]
+    static_assets_url: Url,
 }
 
 #[derive(Debug, Clone)]
 struct Arguments {
     listen_address: SocketAddr,
     prometheus_url: Option<Url>,
+    static_assets_url: Url,
 }
 
 impl Arguments {
@@ -38,6 +47,7 @@ impl Arguments {
         Arguments {
             listen_address: args.listen_address,
             prometheus_url: args.prometheus_url,
+            static_assets_url: args.static_assets_url,
         }
     }
 }
@@ -58,7 +68,15 @@ pub async fn handle_command(args: CliArguments) -> Result<()> {
 
     // Start web server for hosting the explorer, am api and proxies to the enabled services.
     let web_server_task = async move {
-        start_web_server(&args.listen_address, false, false, args.prometheus_url, tx).await
+        start_web_server(
+            &args.listen_address,
+            false,
+            false,
+            args.prometheus_url,
+            args.static_assets_url,
+            tx,
+        )
+        .await
     };
 
     select! {
