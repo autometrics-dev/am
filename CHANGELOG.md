@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `am list all` now detects Python projects that use either `setuptools`, a
   `pyproject.toml`-compatible solution, or a `requirements.txt` file (#143)
 - `am list` now properly ignores the `target/` folder of Rust projects (#143)
+- `am list` now tries to track Rust module name better when called inside a
+  cargo workspace (#143)
 
 ## [0.5.0]
 
