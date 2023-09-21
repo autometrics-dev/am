@@ -2,7 +2,10 @@ use log::debug;
 use walkdir::{DirEntry, WalkDir};
 
 use crate::{AmlError, Language};
-use std::path::{Path, PathBuf};
+use std::{
+    collections::HashSet,
+    path::{Path, PathBuf},
+};
 
 /// Use file heuristics to detect valid project roots under the given directory.
 pub fn find_project_roots(repo: &Path) -> Result<Vec<(PathBuf, Language)>, AmlError> {
@@ -17,8 +20,15 @@ pub fn find_project_roots(repo: &Path) -> Result<Vec<(PathBuf, Language)>, AmlEr
     let go_roots = find_go_roots(&abs_repo)
         .into_iter()
         .map(|project_root| (project_root, Language::Go));
+    let py_roots = find_py_roots(&abs_repo)
+        .into_iter()
+        .map(|project_root| (project_root, Language::Python));
 
-    Ok(rust_roots.chain(ts_roots).chain(go_roots).collect())
+    Ok(rust_roots
+        .chain(ts_roots)
+        .chain(go_roots)
+        .chain(py_roots)
+        .collect())
 }
 
 fn is_hidden(entry: &DirEntry) -> bool {
@@ -158,6 +168,30 @@ fn find_go_roots(repo: &Path) -> Vec<PathBuf> {
                 Ok(path) => {
                     if path.file_type().is_file() && path.file_name().to_str() == Some("go.mod") {
                         path.path().parent().map(Path::to_path_buf)
+                    } else {
+                        None
+                    }
+                }
+                _ => None,
+            }
+        })
+        .collect()
+}
+
+fn find_py_roots(repo: &Path) -> HashSet<PathBuf> {
+    let walker = WalkDir::new(repo).into_iter();
+    walker
+        .filter_entry(|e| !is_hidden(e))
+        .filter_map(|e| -> Option<PathBuf> {
+            match e {
+                Ok(path) => {
+                    if path.file_type().is_file() {
+                        match path.file_name().to_str() {
+                            Some("setup.py")
+                            | Some("requirements.txt")
+                            | Some("pyproject.toml") => path.path().parent().map(Path::to_path_buf),
+                            _ => None,
+                        }
                     } else {
                         None
                     }
