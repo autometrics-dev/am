@@ -25,7 +25,13 @@ impl Impl {
         entry
             .file_name()
             .to_str()
-            .map(|s| s.starts_with('.'))
+            .map(|s| {
+                s.starts_with('.') ||
+                 // We only ignore folders/files named "target" if they are at
+                 // the root of the project, for the unlikely case where there
+                 // is a "target" module deeper in the project.
+                 (entry.depth() == 1 && s == "target")
+            })
             .unwrap_or(false)
     }
 
