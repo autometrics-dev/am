@@ -4,6 +4,11 @@
 (function
  name: (identifier) @func.name)
 
+(lexical_declaration
+ (variable_declarator
+  name: (identifier) @func.name
+  value: (arrow_function)))
+
 (class_declaration
  name: (type_identifier) @type.name
  body: (class_body
