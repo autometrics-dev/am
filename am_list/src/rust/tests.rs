@@ -91,6 +91,47 @@ fn detect_impl_block() {
 }
 
 #[test]
+fn detect_method_in_impl_block() {
+    let source = r#"
+        struct Foo{};
+
+        impl Foo {
+            #[autometrics]
+            fn method_a() {}
+        }
+        "#;
+
+    let list = AmQuery::try_new()
+        .unwrap()
+        .list_function_names(FILE_NAME, MODULE_NAME.to_string(), source)
+        .unwrap();
+
+    let location = Location {
+        file: FILE_NAME.to_string(),
+        range: Range {
+            start: Position {
+                line: 5,
+                column: 15,
+            },
+            end: Position {
+                line: 5,
+                column: 15 + "method_a".len(),
+            },
+        },
+    };
+
+    assert_eq!(list.len(), 1);
+    assert_eq!(
+        list[0],
+        FunctionInfo {
+            id: (MODULE_NAME, "Foo::method_a").into(),
+            instrumentation: Some(location.clone()),
+            definition: Some(location),
+        }
+    );
+}
+
+#[test]
 fn detect_trait_impl_block() {
     let source = r#"
         struct Foo{};

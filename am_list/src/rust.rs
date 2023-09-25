@@ -25,7 +25,13 @@ impl Impl {
         entry
             .file_name()
             .to_str()
-            .map(|s| s.starts_with('.'))
+            .map(|s| {
+                s.starts_with('.') ||
+                 // We only ignore folders/files named "target" if they are at
+                 // the root of the project, for the unlikely case where there
+                 // is a "target" module deeper in the project.
+                 (entry.depth() == 1 && s == "target")
+            })
             .unwrap_or(false)
     }
 
@@ -47,12 +53,19 @@ impl Impl {
         let mut path = entry.path();
 
         // NOTE(magic)
-        // This "1" magic constant bears the assumption "am_list" is called
-        // from the root of a crate.
-        while current_depth > 1 {
+        // This "0" magic constant bears the assumption "am_list" is called
+        // from the root of a crate _or workspace_.
+        //
+        // HACK: Using the name of the directory all the time for module will
+        // only work in workspaces if the sub-crate is always imported as the
+        // name of its folder.
+        while current_depth > 0 {
             if path.is_dir() {
                 if let Some(component) = path.file_name() {
-                    mod_name_elements.push_front(component.to_string_lossy().to_string());
+                    let component = component.to_string_lossy();
+                    if component != "src" {
+                        mod_name_elements.push_front(component.replace('-', "_"));
+                    }
                 }
             } else if path.is_file() {
                 if let Some(stem) = path
