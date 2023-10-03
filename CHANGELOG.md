@@ -15,6 +15,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `am list` now properly ignores the `target/` folder of Rust projects (#143)
 - `am list` now tries to track Rust module name better when called inside a
   cargo workspace (#143)
+- If a proxied request fails, am will now log more information and using
+  different log levels, depending on the status code (#146):
+    - 4xx: `debug` (still requires `--verbose` flag)
+    - 5xx and connection issues: `warn` (will log by default)
+    - Other status codes: `trace`
 
 ## [0.5.0]
 

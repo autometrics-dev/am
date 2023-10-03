@@ -3,14 +3,17 @@ use axum::body;
 use axum::body::Body;
 use axum::response::{IntoResponse, Response};
 use http::{StatusCode, Uri};
-use tracing::{debug, error, trace};
+use tracing::{debug, error, trace, warn};
 use url::Url;
 
 pub(crate) async fn proxy_handler(
     mut req: http::Request<Body>,
     upstream_base: Url,
 ) -> impl IntoResponse {
-    trace!(req_uri=?req.uri(),method=?req.method(),"Proxying request");
+    let req_uri = req.uri().to_string();
+    let method = req.method().to_string();
+
+    trace!(req_uri=%req_uri, method=%method, "Proxying request");
 
     // NOTE: The username/password is not forwarded
     let mut url = upstream_base.join(req.uri().path()).unwrap();
@@ -21,17 +24,41 @@ pub(crate) async fn proxy_handler(
 
     match res {
         Ok(res) => {
-            if !res.status().is_success() {
+            if res.status().is_server_error() {
+                warn!(
+                    method=%method,
+                    req_uri=%req_uri,
+                    upstream_uri=%res.url(),
+                    status_code=%res.status(),
+                    "Response from the upstream source returned a server error status code",
+                );
+            } else if res.status().is_client_error() {
                 debug!(
-                    "Response from the upstream source returned a non-success status code for {}: {:?}",
-                    res.url(), res.status()
+                    method=%method,
+                    req_uri=%req_uri,
+                    upstream_uri=%res.url(),
+                    status_code=%res.status(),
+                    "Response from the upstream source returned a client error status code",
+                );
+            } else {
+                trace!(
+                    method=%method,
+                    req_uri=%req_uri,
+                    upstream_uri=%res.url(),
+                    status_code=%res.status(),
+                    "Response from the upstream source",
                 );
             }
 
             convert_response(res).into_response()
         }
         Err(err) => {
-            error!("Error proxying request: {:?}", err);
+            warn!(
+                method=%method,
+                req_uri=%req_uri,
+                err=%err,
+                "Unable to proxy request to upstream server",
+            );
             StatusCode::INTERNAL_SERVER_ERROR.into_response()
         }
     }
