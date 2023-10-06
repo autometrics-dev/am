@@ -36,6 +36,49 @@ dependencies = [
 ]
 
 [[package]]
+name = "am"
+version = "0.5.0"
+dependencies = [
+ "am_list",
+ "anyhow",
+ "autometrics-am",
+ "axum",
+ "clap",
+ "clap-markdown",
+ "dialoguer",
+ "directories",
+ "flate2",
+ "futures-util",
+ "hex",
+ "http",
+ "humantime",
+ "include_dir",
+ "indicatif",
+ "itertools",
+ "octocrab",
+ "once_cell",
+ "open",
+ "rand",
+ "remove_dir_all",
+ "reqwest",
+ "rstest",
+ "self-replace",
+ "semver_rs",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "sha2",
+ "tar",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "toml",
+ "tracing",
+ "tracing-subscriber",
+ "url",
+]
+
+[[package]]
 name = "am_list"
 version = "0.5.0"
 dependencies = [
@@ -160,42 +203,10 @@ checksum = "d468802bab17cbc0cc575e9b053f41e72aa36bfa6b7f55e3529ffa43161b97fa"
 name = "autometrics-am"
 version = "0.5.0"
 dependencies = [
- "am_list",
  "anyhow",
- "axum",
- "clap",
- "clap-markdown",
- "dialoguer",
- "directories",
- "flate2",
- "futures-util",
- "hex",
- "http",
  "humantime",
  "humantime-serde",
- "include_dir",
- "indicatif",
- "itertools",
- "octocrab",
- "once_cell",
- "open",
- "rand",
- "remove_dir_all",
- "reqwest",
- "rstest",
- "self-replace",
- "semver_rs",
  "serde",
- "serde_json",
- "serde_yaml",
- "sha2",
- "tar",
- "tempfile",
- "thiserror",
- "tokio",
- "toml",
- "tracing",
- "tracing-subscriber",
  "url",
 ]
 
