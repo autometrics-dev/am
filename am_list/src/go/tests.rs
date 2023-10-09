@@ -158,3 +158,101 @@ fn detect_legacy() {
     assert!(all_list.contains(&not_the_one));
     assert!(all_list.contains(&not_that_one));
 }
+
+#[test]
+fn detect_method() {
+    let source = r#"
+        package lambda
+
+        //autometrics:inst
+        func (s Server) the_one() {
+        	return nil
+        }
+        "#;
+
+    let query = AmQuery::try_new().unwrap();
+    let list = query.list_function_names(FILE_NAME, source).unwrap();
+    let all_query = AllFunctionsQuery::try_new().unwrap();
+    let all_list = all_query.list_function_names(FILE_NAME, source).unwrap();
+
+    let the_one_location = Location {
+        file: FILE_NAME.to_string(),
+        range: Range {
+            start: Position {
+                line: 4,
+                column: 24,
+            },
+            end: Position {
+                line: 4,
+                column: 31,
+            },
+        },
+    };
+
+    let the_one_instrumented = FunctionInfo {
+        id: ("lambda", "Server.the_one").into(),
+        instrumentation: Some(the_one_location.clone()),
+        definition: Some(the_one_location.clone()),
+    };
+
+    let the_one_all_functions = FunctionInfo {
+        definition: Some(the_one_location),
+        id: ("lambda", "Server.the_one").into(),
+        instrumentation: None,
+    };
+
+    assert_eq!(list.len(), 1);
+    assert_eq!(list[0], the_one_instrumented);
+
+    assert_eq!(all_list.len(), 1);
+    assert_eq!(all_list[0], the_one_all_functions);
+}
+
+#[test]
+fn detect_method_pointer_receiver() {
+    let source = r#"
+        package lambda
+
+        //autometrics:inst
+        func (h *Handler) the_one() {
+        	return nil
+        }
+        "#;
+
+    let query = AmQuery::try_new().unwrap();
+    let list = query.list_function_names(FILE_NAME, source).unwrap();
+    let all_query = AllFunctionsQuery::try_new().unwrap();
+    let all_list = all_query.list_function_names(FILE_NAME, source).unwrap();
+
+    let the_one_location = Location {
+        file: FILE_NAME.to_string(),
+        range: Range {
+            start: Position {
+                line: 4,
+                column: 26,
+            },
+            end: Position {
+                line: 4,
+                column: 33,
+            },
+        },
+    };
+
+    let the_one_instrumented = FunctionInfo {
+        id: ("lambda", "Handler.the_one").into(),
+        instrumentation: Some(the_one_location.clone()),
+        definition: Some(the_one_location.clone()),
+    };
+
+    let the_one_all_functions = FunctionInfo {
+        id: ("lambda", "Handler.the_one").into(),
+        instrumentation: None,
+        definition: Some(the_one_location),
+    };
+
+    assert_eq!(list.len(), 1);
+    assert_eq!(list[0], the_one_instrumented);
+
+    assert_eq!(all_list.len(), 1);
+    assert_eq!(all_list[0], the_one_all_functions);
+}
