@@ -1,6 +1,11 @@
 [workspace]
-# Makes 'cargo run' start am by default.
-default-members = ["."]
+members = [
+    "am",
+    "am_list",
+    "autometrics-am"
+]
+default-members = ["am"]
+resolver = "2"
 
 [workspace.package]
 version = "0.5.0"
@@ -11,57 +16,8 @@ repository = "https://github.com/autometrics-dev/am"
 homepage = "https://autometrics.dev"
 license = "MIT OR Apache-2.0"
 
-[package]
-name = "autometrics-am"
-description = ""
-keywords = ["metrics", "prometheus", "opentelemetry"]
-categories = ["development-tools::profiling"]
-version.workspace = true
-edition.workspace = true
-authors.workspace = true
-documentation.workspace = true
-repository.workspace = true
-homepage.workspace = true
-license.workspace = true
-
-
-[dependencies]
-am_list = { path = "./am_list" }
-anyhow = { version = "1.0.71" }
-axum = { version = "0.6.18" }
-clap = { version = "4.2.7", features = ["derive", "env"] }
-clap-markdown = { git = "https://github.com/keturiosakys/clap-markdown.git" }
-dialoguer = "0.10.4"
-directories = { version = "5.0.1" }
-flate2 = { version = "1.0.26" }
-futures-util = { version = "0.3.28", features = ["io"] }
-hex = "0.4.3"
-http = { version = "0.2.9" }
+[workspace.dependencies]
+anyhow = "1.0.71"
 humantime = "2.1.0"
-humantime-serde = "1.1.1"
-include_dir = { version = "0.7.3" }
-indicatif = "0.17.5"
-itertools = "0.11.0"
-octocrab = "0.29.3"
-once_cell = { version = "1.17.1" }
-open = "5.0.0"
-rand = "0.8.5"
-remove_dir_all = { version = "0.8.2" }
-reqwest = { version = "0.11.18", default-features = false, features = ["json", "rustls-tls", "stream"] }
-self-replace = "1.3.5"
-semver_rs = "0.2.0"
 serde = { version = "1.0.163", features = ["derive"] }
-serde_json = "1.0.96"
-serde_yaml = { version = "0.9.21" }
-sha2 = "0.10.6"
-tar = { version = "0.4.38" }
-tempfile = { version = "3.5.0" }
-tokio = { version = "1.28.1", features = ["full"] }
-toml = { version = "0.7.4" }
-thiserror = "1.0.48"
-tracing = { version = "0.1.37" }
-tracing-subscriber = { version = "0.3.17", features = ["env-filter", "json"] }
 url = { version = "2.3.1", features = ["serde"] }
-
-[dev-dependencies]
-rstest = { version = "0.18.2" }

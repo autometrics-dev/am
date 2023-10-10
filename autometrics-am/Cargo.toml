@@ -1,0 +1,16 @@
+[package]
+name = "autometrics-am"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+documentation.workspace = true
+repository.workspace = true
+homepage.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+humantime = { workspace = true }
+humantime-serde = "1.1.1"
+serde = { workspace = true }
+url = { workspace = true }

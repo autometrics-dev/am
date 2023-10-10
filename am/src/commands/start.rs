@@ -611,7 +611,7 @@ async fn start_prometheus(
         let rule_file = env::temp_dir().join("autometrics.rules.yml");
         fs::write(
             rule_file,
-            include_bytes!("../../../../files/autometrics-shared/autometrics.rules.yml"),
+            include_bytes!("../../../files/autometrics-shared/autometrics.rules.yml"),
         )?;
     }
 
