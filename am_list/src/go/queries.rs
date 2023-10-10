@@ -4,6 +4,7 @@ use tree_sitter::{Parser, Query};
 use tree_sitter_go::language;
 
 const PACK_NAME_CAPTURE: &str = "pack.name";
+const TYPE_NAME_CAPTURE: &str = "type.name";
 
 fn new_parser() -> Result<Parser> {
     let mut parser = Parser::new();
@@ -15,6 +16,8 @@ fn new_parser() -> Result<Parser> {
 #[derive(Debug)]
 pub(super) struct AmQuery {
     query: Query,
+    /// Index of the capture for a Type, in the case of methods.
+    type_name_idx: u32,
     /// Index of the capture for a function name.
     func_name_idx: u32,
     /// Index of the capture for the package name.
@@ -31,6 +34,9 @@ impl AmQuery {
             language(),
             include_str!("../../runtime/queries/go/autometrics.scm"),
         )?;
+        let type_name_idx = query
+            .capture_index_for_name(TYPE_NAME_CAPTURE)
+            .ok_or_else(|| AmlError::MissingNamedCapture(TYPE_NAME_CAPTURE.to_string()))?;
         let func_name_idx = query
             .capture_index_for_name(FUNC_NAME_CAPTURE)
             .ok_or_else(|| AmlError::MissingNamedCapture(FUNC_NAME_CAPTURE.to_string()))?;
@@ -40,6 +46,7 @@ impl AmQuery {
 
         Ok(Self {
             query,
+            type_name_idx,
             func_name_idx,
             mod_name_idx,
         })
@@ -57,6 +64,11 @@ impl AmQuery {
                     .nodes_for_capture_index(self.mod_name_idx)
                     .next()
                     .map(|node| node.utf8_text(source.as_bytes()).map(ToString::to_string))?;
+                let type_name = capture
+                    .nodes_for_capture_index(self.type_name_idx)
+                    .next()
+                    .map(|node| node.utf8_text(source.as_bytes()).map(ToString::to_string))
+                    .transpose();
                 let fn_node = capture.nodes_for_capture_index(self.func_name_idx).next()?;
                 let fn_name = fn_node
                     .utf8_text(source.as_bytes())
@@ -66,17 +78,32 @@ impl AmQuery {
                 let instrumentation = Some(Location::from((file_name, start, end)));
                 let definition = Some(Location::from((file_name, start, end)));
 
-                match (module, fn_name) {
-                    (Ok(module), Ok(function)) => Some(Ok(FunctionInfo {
-                        id: (module, function).into(),
+                match (module, type_name, fn_name) {
+                    (Ok(module), Ok(type_name), Ok(function)) => Some(Ok(FunctionInfo {
+                        id: (
+                            module,
+                            format!(
+                                "{}{function}",
+                                if let Some(go_type) = type_name {
+                                    format!("{go_type}.")
+                                } else {
+                                    String::new()
+                                }
+                            ),
+                        )
+                            .into(),
                         instrumentation,
                         definition,
                     })),
-                    (Err(err_mod), _) => {
+                    (Err(err_mod), _, _) => {
                         error!("could not fetch the package name: {err_mod}");
                         Some(Err(AmlError::InvalidText))
                     }
-                    (_, Err(err_fn)) => {
+                    (_, Err(err_typ), _) => {
+                        error!("could not fetch the package name: {err_typ}");
+                        Some(Err(AmlError::InvalidText))
+                    }
+                    (_, _, Err(err_fn)) => {
                         error!("could not fetch the package name: {err_fn}");
                         Some(Err(AmlError::InvalidText))
                     }
@@ -90,6 +117,8 @@ impl AmQuery {
 #[derive(Debug)]
 pub(super) struct AllFunctionsQuery {
     query: Query,
+    /// Index of the capture for a Type, in the case of methods.
+    type_name_idx: u32,
     /// Index of the capture for a function name.
     func_name_idx: u32,
     /// Index of the capture for the package name.
@@ -106,6 +135,9 @@ impl AllFunctionsQuery {
             language(),
             include_str!("../../runtime/queries/go/all_functions.scm"),
         )?;
+        let type_name_idx = query
+            .capture_index_for_name(TYPE_NAME_CAPTURE)
+            .ok_or_else(|| AmlError::MissingNamedCapture(TYPE_NAME_CAPTURE.to_string()))?;
         let func_name_idx = query
             .capture_index_for_name(FUNC_NAME_CAPTURE)
             .ok_or_else(|| AmlError::MissingNamedCapture(FUNC_NAME_CAPTURE.to_string()))?;
@@ -115,6 +147,7 @@ impl AllFunctionsQuery {
 
         Ok(Self {
             query,
+            type_name_idx,
             func_name_idx,
             mod_name_idx,
         })
@@ -132,6 +165,11 @@ impl AllFunctionsQuery {
                     .nodes_for_capture_index(self.mod_name_idx)
                     .next()
                     .map(|node| node.utf8_text(source.as_bytes()).map(ToString::to_string))?;
+                let type_name = capture
+                    .nodes_for_capture_index(self.type_name_idx)
+                    .next()
+                    .map(|node| node.utf8_text(source.as_bytes()).map(ToString::to_string))
+                    .transpose();
                 let fn_node = capture.nodes_for_capture_index(self.func_name_idx).next()?;
                 let fn_name = fn_node
                     .utf8_text(source.as_bytes())
@@ -141,17 +179,32 @@ impl AllFunctionsQuery {
                 let instrumentation = None;
                 let definition = Some(Location::from((file_name, start, end)));
 
-                match (module, fn_name) {
-                    (Ok(module), Ok(function)) => Some(Ok(FunctionInfo {
-                        id: (module, function).into(),
+                match (module, type_name, fn_name) {
+                    (Ok(module), Ok(type_name), Ok(function)) => Some(Ok(FunctionInfo {
+                        id: (
+                            module,
+                            format!(
+                                "{}{function}",
+                                if let Some(go_type) = type_name {
+                                    format!("{go_type}.")
+                                } else {
+                                    String::new()
+                                }
+                            ),
+                        )
+                            .into(),
                         instrumentation,
                         definition,
                     })),
-                    (Err(err_mod), _) => {
+                    (Err(err_mod), _, _) => {
                         error!("could not fetch the package name: {err_mod}");
                         Some(Err(AmlError::InvalidText))
                     }
-                    (_, Err(err_fn)) => {
+                    (_, Err(err_typ), _) => {
+                        error!("could not fetch the package name: {err_typ}");
+                        Some(Err(AmlError::InvalidText))
+                    }
+                    (_, _, Err(err_fn)) => {
                         error!("could not fetch the package name: {err_fn}");
                         Some(Err(AmlError::InvalidText))
                     }

@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - 4xx: `debug` (still requires `--verbose` flag)
     - 5xx and connection issues: `warn` (will log by default)
     - Other status codes: `trace`
+- `am list` now properly detects methods in Go (#148)
 
 ## [0.5.0]
 
