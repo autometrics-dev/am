@@ -21,6 +21,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - 5xx and connection issues: `warn` (will log by default)
     - Other status codes: `trace`
 - `am list` now properly detects methods in Go (#148)
+- Update Rust dependencies (#150)
+- Update default versions of Prometheus and Pushgateway (#150)
 
 ## [0.5.0]
 

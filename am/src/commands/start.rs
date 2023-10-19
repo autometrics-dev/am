@@ -55,7 +55,7 @@ pub struct CliArguments {
     #[clap(
         long,
         env,
-        default_value = "v2.45.0",
+        default_value = "v2.47.2",
         help_heading = "Prometheus options"
     )]
     prometheus_version: String,
@@ -91,7 +91,7 @@ pub struct CliArguments {
     #[clap(
         long,
         env,
-        default_value = "v1.6.0",
+        default_value = "v1.6.2",
         help_heading = "Pushgateway options"
     )]
     pushgateway_version: String,
