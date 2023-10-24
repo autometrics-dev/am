@@ -198,3 +198,68 @@ fn detect_nested() {
     assert!(all_list.contains(&the_one));
     assert!(all_list.contains(&the_two));
 }
+
+#[test]
+fn instrument_nested() {
+    let source = r#"
+import os
+
+        def the_one():
+            def the_two():
+                return 'wake up, Neo'
+            return the_two()
+        "#;
+
+    let expected = r#"from autometrics import autometrics
+
+import os
+
+        @autometrics
+        def the_one():
+            @autometrics
+            def the_two():
+                return 'wake up, Neo'
+            return the_two()
+        "#;
+
+    let mut implementation = Impl {};
+    let actual = implementation.instrument_source_code(source).unwrap();
+    assert_eq!(&actual, expected);
+}
+
+#[test]
+fn instrument_multiple() {
+    let source = r#"
+        from autometrics import autometrics
+
+        def the_one():
+            return 'wake up, Neo'
+
+        @autometrics
+        def the_two():
+            return 'wake up, Neo'
+
+        def the_three():
+            return 'wake up, Neo'
+        "#;
+
+    let expected = r#"
+        from autometrics import autometrics
+
+        @autometrics
+        def the_one():
+            return 'wake up, Neo'
+
+        @autometrics
+        def the_two():
+            return 'wake up, Neo'
+
+        @autometrics
+        def the_three():
+            return 'wake up, Neo'
+        "#;
+
+    let mut implementation = Impl {};
+    let actual = implementation.instrument_source_code(source).unwrap();
+    assert_eq!(&actual, expected);
+}

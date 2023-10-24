@@ -256,3 +256,66 @@ fn detect_method_pointer_receiver() {
     assert_eq!(all_list.len(), 1);
     assert_eq!(all_list[0], the_one_all_functions);
 }
+
+#[test]
+fn instrument_method() {
+    let source = r#"
+        package lambda
+
+        func (s Server) the_one() {
+        	return nil
+        }
+        "#;
+
+    let expected = r#"//go:generate autometrics --otel
+
+        package lambda
+
+//autometrics:inst
+        func (s Server) the_one() {
+        	return nil
+        }
+        "#;
+
+    let mut implementation = Impl {};
+    let actual = implementation.instrument_source_code(source).unwrap();
+    assert_eq!(&actual, expected);
+}
+
+#[test]
+fn instrument_multiple() {
+    let source = r#"package beta
+
+        func not_the_one() {
+        }
+
+        //autometrics:doc
+        func sandwiched_function() {
+        	return nil
+        }
+
+        func not_that_one_either() {
+        }
+        "#;
+
+    let expected = r#"//go:generate autometrics --otel
+package beta
+
+//autometrics:inst
+        func not_the_one() {
+        }
+
+        //autometrics:doc
+        func sandwiched_function() {
+        	return nil
+        }
+
+//autometrics:inst
+        func not_that_one_either() {
+        }
+        "#;
+
+    let mut implementation = Impl {};
+    let actual = implementation.instrument_source_code(source).unwrap();
+    assert_eq!(&actual, expected);
+}

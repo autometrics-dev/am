@@ -1,12 +1,15 @@
 use std::path::Path;
 
 use log::warn;
+use serde::{Deserialize, Serialize};
 use tree_sitter::{Parser, Query};
 use tree_sitter_typescript::language_typescript as language;
 
-use crate::{AmlError, FunctionInfo, Location, Result, FUNC_NAME_CAPTURE};
+use crate::{AmlError, FunctionInfo, Location, Range, Result, FUNC_NAME_CAPTURE};
 
 use super::imports::{Identifier, ImportsMap, Source};
+
+const FUNCTION_RVALUE_CAPTURE: &str = "func.value";
 
 const TYPE_NAME_CAPTURE: &str = "type.name";
 const METHOD_NAME_CAPTURE: &str = "method.name";
@@ -31,10 +34,25 @@ pub(super) struct AllFunctionsQuery {
     query: Query,
     /// Index of the capture for a function name.
     func_name_idx: u32,
+    /// Index of the capture for a function value, when the function is
+    /// used in an assignment.
+    func_value_idx: u32,
     /// Index of the capture for the name of a class that is defined in file.
     type_name_idx: u32,
     /// Index of the capture for the contents of a method that is defined in file.
     method_name_idx: u32,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct TypescriptFunctionInfo {
+    pub inner_info: FunctionInfo,
+    pub function_rvalue_range: Option<Range>,
+}
+
+impl From<TypescriptFunctionInfo> for FunctionInfo {
+    fn from(value: TypescriptFunctionInfo) -> Self {
+        value.inner_info
+    }
 }
 
 impl AllFunctionsQuery {
@@ -46,6 +64,9 @@ impl AllFunctionsQuery {
         let func_name_idx = query
             .capture_index_for_name(FUNC_NAME_CAPTURE)
             .ok_or_else(|| AmlError::MissingNamedCapture(FUNC_NAME_CAPTURE.to_string()))?;
+        let func_value_idx = query
+            .capture_index_for_name(FUNCTION_RVALUE_CAPTURE)
+            .ok_or_else(|| AmlError::MissingNamedCapture(FUNCTION_RVALUE_CAPTURE.to_string()))?;
         let type_name_idx = query
             .capture_index_for_name(TYPE_NAME_CAPTURE)
             .ok_or_else(|| AmlError::MissingNamedCapture(TYPE_NAME_CAPTURE.to_string()))?;
@@ -56,6 +77,7 @@ impl AllFunctionsQuery {
         Ok(Self {
             query,
             func_name_idx,
+            func_value_idx,
             type_name_idx,
             method_name_idx,
         })
@@ -66,20 +88,25 @@ impl AllFunctionsQuery {
         file_name: &str,
         module_name: &str,
         source: &str,
-    ) -> Result<Vec<FunctionInfo>> {
+    ) -> Result<Vec<TypescriptFunctionInfo>> {
         let mut parser = new_parser()?;
         let parsed_source = parser.parse(source, None).ok_or(AmlError::Parsing)?;
         let mut cursor = tree_sitter::QueryCursor::new();
         let functions = cursor
             .matches(&self.query, parsed_source.root_node(), source.as_bytes())
-            .filter_map(|capture| -> Option<FunctionInfo> {
+            .filter_map(|capture| -> Option<TypescriptFunctionInfo> {
                 let func_name_node = capture.nodes_for_capture_index(self.func_name_idx).next();
+                let func_value_node = capture.nodes_for_capture_index(self.func_value_idx).next();
                 let method_name_node = capture.nodes_for_capture_index(self.method_name_idx).next();
                 let type_name_node = capture.nodes_for_capture_index(self.type_name_idx).next();
                 match (
                     // Test for bare function capture
                     func_name_node
                         .map(|node| node.utf8_text(source.as_bytes()).map(ToString::to_string)),
+                    // Test for function assignment capture
+                    func_value_node.map(|node| {
+                        Range::from((node.range().start_point, node.range().end_point))
+                    }),
                     // Test for method name capture
                     method_name_node
                         .map(|node| node.utf8_text(source.as_bytes()).map(ToString::to_string)),
@@ -87,7 +114,7 @@ impl AllFunctionsQuery {
                     type_name_node
                         .map(|node| node.utf8_text(source.as_bytes()).map(ToString::to_string)),
                 ) {
-                    (Some(Ok(bare_function_name)), _, _) => {
+                    (Some(Ok(bare_function_name)), function_rvalue_range, _, _) => {
                         let start = func_name_node
                             .expect("just extracted a name from the node")
                             .start_position();
@@ -96,13 +123,16 @@ impl AllFunctionsQuery {
                             .end_position();
                         let instrumentation = None;
                         let definition = Some(Location::from((file_name, start, end)));
-                        Some(FunctionInfo {
-                            id: (module_name, bare_function_name).into(),
-                            instrumentation,
-                            definition,
+                        Some(TypescriptFunctionInfo {
+                            inner_info: FunctionInfo {
+                                id: (module_name, bare_function_name).into(),
+                                instrumentation,
+                                definition,
+                            },
+                            function_rvalue_range,
                         })
                     }
-                    (_, Some(Ok(method_name)), Some(Ok(class_name))) => {
+                    (_, _, Some(Ok(method_name)), Some(Ok(class_name))) => {
                         let start = method_name_node
                             .expect("just extracted a name from the node")
                             .start_position();
@@ -112,29 +142,32 @@ impl AllFunctionsQuery {
                         let instrumentation = None;
                         let definition = Some(Location::from((file_name, start, end)));
                         let qual_fn_name = format!("{class_name}.{method_name}");
-                        Some(FunctionInfo {
-                            id: (module_name, qual_fn_name).into(),
-                            instrumentation,
-                            definition,
+                        Some(TypescriptFunctionInfo {
+                            inner_info: FunctionInfo {
+                                id: (module_name, qual_fn_name).into(),
+                                instrumentation,
+                                definition,
+                            },
+                            function_rvalue_range: None,
                         })
                     }
-                    (_, None, Some(_)) => {
+                    (_, _, None, Some(_)) => {
                         warn!("Found a class without a method in the capture");
                         None
                     }
-                    (_, Some(_), None) => {
+                    (_, _, Some(_), None) => {
                         warn!("Found a method without a class in the capture");
                         None
                     }
-                    (Some(Err(e)), _, _) => {
+                    (Some(Err(e)), _, _, _) => {
                         warn!("Could not extract a function name: {e}");
                         None
                     }
-                    (_, Some(Err(e)), _) => {
+                    (_, _, Some(Err(e)), _) => {
                         warn!("Could not extract a method name: {e}");
                         None
                     }
-                    (_, _, Some(Err(e))) => {
+                    (_, _, _, Some(Err(e))) => {
                         warn!("Could not extract a class name: {e}");
                         None
                     }

@@ -11,6 +11,8 @@ license.workspace = true
 
 [dependencies]
 anyhow = "1.0.71"
+crop = "0.4.0"
+ignore = "0.4.20"
 itertools = "0.11.0"
 log = "0.4.18"
 rayon = "1.7.0"

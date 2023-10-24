@@ -167,6 +167,62 @@ pub trait ListAmFunctions {
         }
         Ok(info_set.into_values().collect())
     }
+
+    /// List all the autometricized functions in the given source code.
+    fn list_autometrics_functions_in_single_file(
+        &mut self,
+        source_code: &str,
+    ) -> Result<Vec<FunctionInfo>>;
+
+    /// List all the functions defined in the given source code.
+    fn list_all_function_definitions_in_single_file(
+        &mut self,
+        source_code: &str,
+    ) -> Result<Vec<FunctionInfo>>;
+
+    /// List all the functions in the given source code, instrumented or just defined.
+    ///
+    /// This is guaranteed to return the most complete set of information
+    fn list_all_functions_in_single_file(
+        &mut self,
+        source_code: &str,
+    ) -> Result<Vec<FunctionInfo>> {
+        let am_functions = self.list_autometrics_functions_in_single_file(source_code)?;
+        let all_function_definitions =
+            self.list_all_function_definitions_in_single_file(source_code)?;
+        let mut info_set: HashMap<FunctionId, FunctionInfo> = am_functions
+            .into_iter()
+            .map(|full_info| (full_info.id.clone(), full_info))
+            .collect();
+
+        // Only the definition field is expected to differ
+        // between am_functions and all_function_definitions
+        for function in all_function_definitions {
+            info_set
+                .entry(function.id.clone())
+                .and_modify(|info| info.definition = function.definition.clone())
+                .or_insert(function);
+        }
+        Ok(info_set.into_values().collect())
+    }
+}
+
+/// Instrument a file, adding autometrics annotations as necessary.
+///
+/// Each language is responsible to reuse its queries/create additonal queries to add the
+/// necessary code and produce a new version of the file that has _all_ functions instrumented.
+///
+/// The invariant to maintain here is that after being done with a file, all functions defined
+/// in the file should be instrumented.
+pub trait InstrumentFile {
+    /// Instrument all functions in the file
+    fn instrument_source_code(&mut self, source: &str) -> Result<String>;
+    /// Instrument all functions under the given project.
+    fn instrument_project(
+        &mut self,
+        project_root: &Path,
+        exclude_patterns: Option<&ignore::gitignore::Gitignore>,
+    ) -> Result<()>;
 }
 
 pub type Result<T> = std::result::Result<T, AmlError>;
@@ -192,6 +248,9 @@ pub enum AmlError {
     /// Issue when trying to extract a path to a project
     #[error("Invalid path to project")]
     InvalidPath,
+    /// Issue when trying to interact with the filesystem
+    #[error("IO error")]
+    IO(#[from] std::io::Error),
 }
 
 /// Languages supported by `am_list`.
@@ -282,4 +341,37 @@ pub fn list_single_project_functions(
     };
     res.sort();
     Ok(res)
+}
+
+pub fn instrument_all_project_files(
+    root: &Path,
+    exclude_patterns: &ignore::gitignore::Gitignore,
+) -> Result<()> {
+    let projects = find_project_roots(root)?;
+
+    // TODO: try to parallelize this loop if possible
+    for (path, language) in projects.iter() {
+        info!(
+            "Instrumenting functions in {} (Language: {})",
+            path.display(),
+            language
+        );
+        instrument_single_project_files(path, *language, exclude_patterns)?;
+    }
+
+    Ok(())
+}
+
+pub fn instrument_single_project_files(
+    root: &Path,
+    language: Language,
+    exclude_patterns: &ignore::gitignore::Gitignore,
+) -> Result<()> {
+    let mut implementor: Box<dyn InstrumentFile> = match language {
+        Language::Rust => Box::new(crate::rust::Impl {}),
+        Language::Go => Box::new(crate::go::Impl {}),
+        Language::Typescript => Box::new(crate::typescript::Impl {}),
+        Language::Python => Box::new(crate::python::Impl {}),
+    };
+    implementor.instrument_project(root, Some(exclude_patterns))
 }
