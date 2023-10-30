@@ -1,4 +1,5 @@
 use anyhow::{Context, Result};
+use autometrics::prometheus_exporter;
 use axum::body::Body;
 use axum::response::Redirect;
 use axum::routing::{any, get};
@@ -59,7 +60,11 @@ pub(crate) async fn start_web_server(
         .route("/explorer/", get(explorer::handler))
         .route("/explorer/static/*path", get(explorer_static_handler))
         .route("/explorer/*path", get(explorer::handler))
-        .route("/api/functions", get(functions::all_functions));
+        .route("/api/functions", get(functions::all_functions))
+        .route(
+            "/self_metrics",
+            get(|| async { prometheus_exporter::encode_http_response() }),
+        );
 
     // Proxy `/prometheus` to the upstream (local) prometheus instance
     if should_enable_prometheus {

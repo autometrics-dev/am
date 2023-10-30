@@ -1,9 +1,11 @@
+use autometrics::autometrics;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
 use http::StatusCode;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+#[autometrics]
 pub(crate) async fn all_functions() -> Result<impl IntoResponse, AllFunctionError> {
     let functions = am_list::list_all_project_functions(
         std::env::current_dir()
