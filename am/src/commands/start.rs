@@ -275,7 +275,6 @@ pub async fn handle_command(args: CliArguments, config: AmConfig, mp: MultiProgr
     }
 
     if args.scrape_self {
-        // add to metrics_emdpoints our own /self_metrics
         let url = Url::parse(&format!("http://{}/self_metrics", args.listen_address)).unwrap();
         let endpoint = Endpoint::new(url, "am_self".to_string(), true, None);
         args.metrics_endpoints.push(endpoint);
