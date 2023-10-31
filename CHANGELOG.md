@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Update Rust dependencies (#150)
 - Update default versions of Prometheus and Pushgateway (#150)
 - Add ability to scrape the metrics of `am`s own web server with `am start --scrape-self` (#153)
+- The URL overview of `am start` and `am proxy` is now prettier (#154)
 
 ## [0.5.0]
 
