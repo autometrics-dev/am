@@ -5,12 +5,12 @@ pub mod rust;
 pub mod typescript;
 
 use log::info;
+use rayon::prelude::*;
 pub use roots::find_project_roots;
-
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, HashMap},
-    fmt::Display,
+    fmt::{Display, Write},
     path::{Path, PathBuf},
     str::FromStr,
 };
@@ -249,8 +249,15 @@ pub enum AmlError {
     #[error("Invalid path to project")]
     InvalidPath,
     /// Issue when trying to interact with the filesystem
-    #[error("IO error")]
+    #[error("I/O error when interacting with the filesystem")]
     IO(#[from] std::io::Error),
+    /// Collection of issues when working with multiple projects
+    #[error("Some projects had errors: {}", 
+        .0.iter().fold(String::new(), |mut output, (path, err)| {
+            let _ = write!(output, "in {}: {}; ", path.display(), err);
+            output
+        }))]
+    Projects(Vec<(PathBuf, Self)>),
 }
 
 /// Languages supported by `am_list`.
@@ -305,19 +312,41 @@ pub fn list_all_project_functions(
     let projects = find_project_roots(root)?;
     let mut res: BTreeMap<PathBuf, (Language, Vec<FunctionInfo>)> = BTreeMap::new();
 
-    // TODO: try to parallelize this loop if possible
-    for (path, language) in projects.iter() {
-        info!(
-            "Listing functions in {} (Language: {})",
-            path.display(),
-            language
-        );
-        let project_fns = list_single_project_functions(path, *language, true)?;
+    let per_project_results = projects
+        .into_par_iter()
+        .map(|(path, language)| {
+            info!(
+                "Listing functions in {} (Language: {})",
+                path.display(),
+                language
+            );
+            match list_single_project_functions(&path, language, true) {
+                Ok(project_fns) => Ok((path.clone(), language, project_fns)),
+                Err(err) => Err((path.clone(), err)),
+            }
+        })
+        .collect::<Vec<_>>();
 
-        res.entry(path.to_path_buf())
-            .or_insert_with(|| (*language, Vec::new()))
-            .1
-            .extend(project_fns);
+    // This filter_map collects the errors into a single one, and has the side-effect of
+    // filling the Ok result in case no error happened along the way.
+    // This is done in a second step rather than within the par_iter because of the mutation
+    // that needs to happen in the resulting map.
+    let errors = per_project_results
+        .into_iter()
+        .filter_map(|result| match result {
+            Ok((path, language, project_fns)) => {
+                res.entry(path.to_path_buf())
+                    .or_insert_with(|| (language, Vec::new()))
+                    .1
+                    .extend(project_fns);
+                None
+            }
+            Err(err) => Some(err),
+        })
+        .collect::<Vec<_>>();
+
+    if !errors.is_empty() {
+        return Err(AmlError::Projects(errors));
     }
 
     Ok(res)
@@ -349,14 +378,27 @@ pub fn instrument_all_project_files(
 ) -> Result<()> {
     let projects = find_project_roots(root)?;
 
-    // TODO: try to parallelize this loop if possible
-    for (path, language) in projects.iter() {
-        info!(
-            "Instrumenting functions in {} (Language: {})",
-            path.display(),
-            language
-        );
-        instrument_single_project_files(path, *language, exclude_patterns)?;
+    let errors = projects
+        .into_par_iter()
+        .filter_map(|(path, language)| {
+            info!(
+                "Instrumenting functions in {} (Language: {})",
+                path.display(),
+                language
+            );
+
+            if let Some(err) =
+                instrument_single_project_files(&path, language, exclude_patterns).err()
+            {
+                return Some((path.clone(), err));
+            }
+
+            None
+        })
+        .collect::<Vec<_>>();
+
+    if !errors.is_empty() {
+        return Err(AmlError::Projects(errors));
     }
 
     Ok(())

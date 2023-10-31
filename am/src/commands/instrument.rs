@@ -1,7 +1,11 @@
+use crate::interactive;
 use am_list::Language;
 use anyhow::Context;
 use clap::{Args, Subcommand};
-use std::path::PathBuf;
+use std::{
+    path::{Path, PathBuf},
+    process,
+};
 use tracing::info;
 
 #[derive(Args)]
@@ -72,11 +76,44 @@ pub fn handle_command(args: Arguments) -> anyhow::Result<()> {
     }
 }
 
+fn folder_has_unstaged_changes(root: &Path) -> Option<bool> {
+    if cfg!(windows) {
+        // TODO: figure out the Windows story
+        return None;
+    }
+
+    if cfg!(unix) {
+        // TODO: Figure out the non git story
+        let git_diff = process::Command::new("git")
+            .arg("-C")
+            .arg(root.as_os_str())
+            .arg("diff")
+            .output();
+        return match git_diff {
+            Ok(output) => Some(!output.stdout.is_empty()),
+            Err(_) => {
+                // We either don't have git, or root is not within a repository
+                None
+            }
+        };
+    }
+
+    None
+}
+
 fn handle_all_projects(args: AllProjects) -> Result<(), anyhow::Error> {
     let root = args
         .root
         .canonicalize()
         .context("The path must be resolvable to an absolute path")?;
+
+    if let Some(true) = folder_has_unstaged_changes(&root) {
+        let cont = interactive::confirm("The targeted root folder seems to have unstaged changes. `am` will also change files in this folder.\nDo you wish to continue?")?;
+        if !cont {
+            return Ok(());
+        }
+    }
+
     info!("Instrumenting functions in {}:", root.display());
 
     let mut exclude_patterns_builder = ignore::gitignore::GitignoreBuilder::new(&root);
@@ -97,6 +134,13 @@ fn handle_single_project(args: SingleProject) -> Result<(), anyhow::Error> {
         .root
         .canonicalize()
         .context("The path must be resolvable to an absolute path")?;
+
+    if let Some(true) = folder_has_unstaged_changes(&root) {
+        let cont = interactive::confirm("The targeted root folder seems to have unstaged changes. `am` will also change files in this folder.\nDo you wish to continue?")?;
+        if !cont {
+            return Ok(());
+        }
+    }
     info!("Instrumenting functions in {}:", root.display());
 
     let mut exclude_patterns_builder = ignore::gitignore::GitignoreBuilder::new(&root);
