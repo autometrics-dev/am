@@ -1,3 +1,4 @@
+use autometrics::autometrics;
 use axum::body;
 use axum::extract::Path;
 use axum::response::{IntoResponse, Response};
@@ -7,6 +8,7 @@ use tracing::{error, trace, warn};
 
 static STATIC_DIR: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/../files/explorer");
 
+#[autometrics]
 pub(crate) async fn handler(optional_path: Option<Path<String>>) -> impl IntoResponse {
     let path = optional_path.map_or_else(|| "index.html".to_string(), |path| path.0);
 

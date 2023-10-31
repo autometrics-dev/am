@@ -111,6 +111,10 @@ pub struct CliArguments {
     /// Whenever to *NOT* load the autometrics rules file into Prometheus
     #[clap(long, env)]
     no_rules: bool,
+
+    /// Whenever to instruct Prometheus to scrape this `am` server as well
+    #[clap(long, env, default_value = "false")]
+    scrape_self: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -124,6 +128,7 @@ struct Arguments {
     ephemeral_working_directory: bool,
     no_rules: bool,
     static_assets_url: Url,
+    scrape_self: bool,
 }
 
 impl Arguments {
@@ -147,6 +152,7 @@ impl Arguments {
                 .unwrap_or_else(|| Duration::from_secs(5)),
             no_rules: args.no_rules,
             static_assets_url: args.static_assets_url,
+            scrape_self: args.scrape_self,
         }
     }
 }
@@ -245,7 +251,7 @@ pub async fn handle_command(args: CliArguments, config: AmConfig, mp: MultiProgr
     let local_data = project_dirs.data_local_dir().to_owned();
 
     // Make sure that the local data directory exists for our application.
-    std::fs::create_dir_all(&local_data)
+    fs::create_dir_all(&local_data)
         .with_context(|| format!("Unable to create data directory: {:?}", local_data))?;
 
     if !args.metrics_endpoints.is_empty() {
@@ -265,6 +271,12 @@ pub async fn handle_command(args: CliArguments, config: AmConfig, mp: MultiProgr
     if args.pushgateway_enabled {
         let url = Url::parse("http://localhost:9091/pushgateway/metrics").unwrap();
         let endpoint = Endpoint::new(url, "am_pushgateway".to_string(), true, None);
+        args.metrics_endpoints.push(endpoint);
+    }
+
+    if args.scrape_self {
+        let url = Url::parse(&format!("http://{}/self_metrics", args.listen_address)).unwrap();
+        let endpoint = Endpoint::new(url, "am_self".to_string(), true, None);
         args.metrics_endpoints.push(endpoint);
     }
 

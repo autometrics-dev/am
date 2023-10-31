@@ -1,5 +1,6 @@
 use crate::commands::update;
 use anyhow::{bail, Context, Result};
+use autometrics::prometheus_exporter;
 use autometrics_am::config::AmConfig;
 use clap::Parser;
 use commands::{handle_command, Application};
@@ -44,6 +45,10 @@ async fn main() {
             std::process::exit(1);
         }
     };
+
+    if let Err(err) = prometheus_exporter::try_init() {
+        warn!(?err, "Unable to initialize prometheus exporter");
+    }
 
     let result = handle_command(app, config, multi_progress).await;
 
