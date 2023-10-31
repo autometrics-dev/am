@@ -54,6 +54,6 @@ pub(crate) fn print_urls(map: &HashMap<&str, String>) -> Result<()> {
         writeln!(stdout, "  {}", url)?;
     }
 
-    writeln!(stdout, "")?;
+    writeln!(stdout)?;
     Ok(())
 }
