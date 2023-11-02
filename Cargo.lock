@@ -49,7 +49,7 @@ dependencies = [
 
 [[package]]
 name = "am"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "am_list",
  "anyhow",
@@ -95,7 +95,7 @@ dependencies = [
 
 [[package]]
 name = "am_list"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "anyhow",
  "crop",
@@ -238,7 +238,7 @@ dependencies = [
 
 [[package]]
 name = "autometrics-am"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "anyhow",
  "humantime",
