@@ -4,13 +4,13 @@ use indicatif::MultiProgress;
 use std::io::{stderr, IoSlice, Result, Write};
 use tracing_subscriber::fmt::MakeWriter;
 
-pub fn user_input(prompt: impl Into<String>) -> Result<String> {
+pub fn user_input(prompt: impl Into<String>) -> dialoguer::Result<String> {
     Input::with_theme(&SimpleTheme)
         .with_prompt(prompt)
         .interact_text()
 }
 
-pub fn user_input_optional(prompt: impl Into<String>) -> Result<Option<String>> {
+pub fn user_input_optional(prompt: impl Into<String>) -> dialoguer::Result<Option<String>> {
     let input: String = Input::with_theme(&SimpleTheme)
         .with_prompt(prompt)
         .allow_empty(true)
@@ -19,13 +19,13 @@ pub fn user_input_optional(prompt: impl Into<String>) -> Result<Option<String>> 
     Ok(if input.is_empty() { None } else { Some(input) })
 }
 
-pub fn confirm(prompt: impl Into<String>) -> Result<bool> {
+pub fn confirm(prompt: impl Into<String>) -> dialoguer::Result<bool> {
     Confirm::with_theme(&SimpleTheme)
         .with_prompt(prompt)
         .interact()
 }
 
-pub fn confirm_optional(prompt: impl Into<String>) -> Result<Option<bool>> {
+pub fn confirm_optional(prompt: impl Into<String>) -> dialoguer::Result<Option<bool>> {
     Confirm::with_theme(&SimpleTheme)
         .with_prompt(prompt)
         .interact_opt()
