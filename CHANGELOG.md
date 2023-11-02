@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+-
+
+## [0.6.0]
+
 - Proxy static assets for explorer instead of loading them directly from explorer.autometrics.dev. This url is also configurable so it is easier to use explorer hosted on a different URL (#142)
 - Add new endpoint `/api/functions` listing all autometrics'd functions in the current
   working directory
