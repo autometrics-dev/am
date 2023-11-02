@@ -28,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `am instrument` is a new subcommand that can automatically add annotations to instrument a project (#152)
    + it works in Go, Python, Typescript, and Rust projects 
 - The URL overview of `am start` and `am proxy` is now prettier (#154)
+- Updated dependencies (#155)
 
 ## [0.5.0]
 
