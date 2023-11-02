@@ -5,10 +5,11 @@ use axum::response::Redirect;
 use axum::routing::{any, get};
 use axum::{Router, Server};
 use http::header::CONNECTION;
+use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::sync::watch::Sender;
-use tracing::{debug, info};
+use tracing::debug;
 use url::Url;
 
 use crate::server::util::proxy_handler;
@@ -26,6 +27,7 @@ pub(crate) async fn start_web_server(
     prometheus_proxy_url: Option<Url>,
     static_assets_url: Url,
     tx: Sender<Option<SocketAddr>>,
+    tx_url: Sender<HashMap<&'static str, String>>,
 ) -> Result<()> {
     let is_proxying_prometheus = prometheus_proxy_url.is_some();
     let should_enable_prometheus = enable_prometheus && !is_proxying_prometheus;
@@ -125,22 +127,27 @@ pub(crate) async fn start_web_server(
 
     debug!("Web server listening on {}", server.local_addr());
 
-    info!("Explorer endpoint: http://{}", server.local_addr());
+    let mut urls = HashMap::from([("Explorer", format!("http://{}", server.local_addr()))]);
 
     if should_enable_prometheus {
-        info!("Prometheus endpoint: http://127.0.0.1:9090/prometheus");
+        urls.insert("Prometheus", "http://127.0.0.1:9090/prometheus".to_string());
     }
 
     if is_proxying_prometheus {
-        info!("Proxying to prometheus: {}", prometheus_proxy_url.unwrap());
+        urls.insert(
+            "Prometheus Proxy Destination",
+            prometheus_proxy_url.unwrap().to_string(),
+        );
     }
 
     if enable_pushgateway {
-        info!("Pushgateway endpoint: http://127.0.0.1:9091/pushgateway");
+        urls.insert(
+            "Pushgateway",
+            "http://127.0.0.1:9091/pushgateway".to_string(),
+        );
     }
 
-    // TODO: Add support for graceful shutdown
-    // server.with_graceful_shutdown(shutdown_signal()).await?;
+    tx_url.send_replace(urls);
     server.await?;
 
     Ok(())

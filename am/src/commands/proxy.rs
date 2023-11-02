@@ -1,7 +1,9 @@
 use crate::server::start_web_server;
+use crate::terminal;
 use anyhow::{bail, Context, Result};
 use clap::Parser;
 use directories::ProjectDirs;
+use std::collections::HashMap;
 use std::net::SocketAddr;
 use tokio::select;
 use tokio::sync::watch;
@@ -65,6 +67,7 @@ pub async fn handle_command(args: CliArguments) -> Result<()> {
         .with_context(|| format!("Unable to create data directory: {:?}", local_data))?;
 
     let (tx, _) = watch::channel(None);
+    let (urls_tx, urls_rx) = watch::channel(HashMap::new());
 
     // Start web server for hosting the explorer, am api and proxies to the enabled services.
     let web_server_task = async move {
@@ -75,9 +78,12 @@ pub async fn handle_command(args: CliArguments) -> Result<()> {
             args.prometheus_url,
             args.static_assets_url,
             tx,
+            urls_tx,
         )
         .await
     };
+
+    terminal::wait_and_print_urls(urls_rx);
 
     select! {
         biased;

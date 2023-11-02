@@ -1,7 +1,7 @@
 use crate::dir::AutoCleanupDir;
 use crate::downloader::{download_github_release, unpack, verify_checksum};
-use crate::interactive;
 use crate::server::start_web_server;
+use crate::{interactive, terminal};
 use anyhow::{anyhow, bail, Context, Result};
 use autometrics_am::config::{endpoints_from_first_input, AmConfig};
 use autometrics_am::parser::endpoint_parser;
@@ -13,6 +13,7 @@ use futures_util::FutureExt;
 use indicatif::MultiProgress;
 use once_cell::sync::Lazy;
 use rand::distributions::{Alphanumeric, DistString};
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::{Seek, SeekFrom};
 use std::net::SocketAddr;
@@ -281,6 +282,7 @@ pub async fn handle_command(args: CliArguments, config: AmConfig, mp: MultiProgr
     }
 
     let (tx, rx) = watch::channel(None);
+    let (tx_url, rx_url) = watch::channel(HashMap::new());
 
     let static_assets_url = args.static_assets_url.clone();
     // Start web server for hosting the explorer, am api and proxies to the enabled services.
@@ -292,6 +294,7 @@ pub async fn handle_command(args: CliArguments, config: AmConfig, mp: MultiProgr
             None,
             static_assets_url,
             tx,
+            tx_url,
         )
         .await
     };
@@ -383,6 +386,8 @@ pub async fn handle_command(args: CliArguments, config: AmConfig, mp: MultiProgr
             .join(", ");
         info!("Now sampling the following endpoints for metrics: {endpoints}");
     }
+
+    terminal::wait_and_print_urls(rx_url);
 
     select! {
         biased;
