@@ -27,6 +27,7 @@ futures-util = { version = "0.3.28", features = ["io"] }
 hex = "0.4.3"
 http = "0.2.9"
 humantime = { workspace = true }
+ignore = "0.4.20"
 include_dir = "0.7.3"
 indicatif = "0.17.5"
 itertools = "0.11.0"

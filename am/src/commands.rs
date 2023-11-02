@@ -7,6 +7,7 @@ use tracing::info;
 
 mod explore;
 mod init;
+mod instrument;
 mod list;
 mod proxy;
 pub mod start;
@@ -64,6 +65,14 @@ pub enum SubCommands {
     /// List the functions in a project
     List(list::Arguments),
 
+    /// Instrument a project entirely.
+    ///
+    /// IMPORTANT: This will add code in your files! If you want to easily
+    /// undo the effects of this command, stage your work in progress (using `git add` or similar)
+    /// So that a command like `git restore .` can undo all unstaged changes, leaving your work
+    /// in progress alone.
+    Instrument(instrument::Arguments),
+
     #[clap(hide = true)]
     MarkdownHelp,
 }
@@ -86,6 +95,7 @@ pub async fn handle_command(app: Application, config: AmConfig, mp: MultiProgres
         }
         SubCommands::Update(args) => update::handle_command(args, mp).await,
         SubCommands::List(args) => list::handle_command(args),
+        SubCommands::Instrument(args) => instrument::handle_command(args),
         SubCommands::MarkdownHelp => {
             let disable_toc = true;
             clap_markdown::print_help_markdown::<Application>(Some(disable_toc));
