@@ -5,12 +5,12 @@ pub mod rust;
 pub mod typescript;
 
 use log::info;
+use rayon::prelude::*;
 pub use roots::find_project_roots;
-
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, HashMap},
-    fmt::Display,
+    fmt::{Display, Write},
     path::{Path, PathBuf},
     str::FromStr,
 };
@@ -167,6 +167,62 @@ pub trait ListAmFunctions {
         }
         Ok(info_set.into_values().collect())
     }
+
+    /// List all the autometricized functions in the given source code.
+    fn list_autometrics_functions_in_single_file(
+        &mut self,
+        source_code: &str,
+    ) -> Result<Vec<FunctionInfo>>;
+
+    /// List all the functions defined in the given source code.
+    fn list_all_function_definitions_in_single_file(
+        &mut self,
+        source_code: &str,
+    ) -> Result<Vec<FunctionInfo>>;
+
+    /// List all the functions in the given source code, instrumented or just defined.
+    ///
+    /// This is guaranteed to return the most complete set of information
+    fn list_all_functions_in_single_file(
+        &mut self,
+        source_code: &str,
+    ) -> Result<Vec<FunctionInfo>> {
+        let am_functions = self.list_autometrics_functions_in_single_file(source_code)?;
+        let all_function_definitions =
+            self.list_all_function_definitions_in_single_file(source_code)?;
+        let mut info_set: HashMap<FunctionId, FunctionInfo> = am_functions
+            .into_iter()
+            .map(|full_info| (full_info.id.clone(), full_info))
+            .collect();
+
+        // Only the definition field is expected to differ
+        // between am_functions and all_function_definitions
+        for function in all_function_definitions {
+            info_set
+                .entry(function.id.clone())
+                .and_modify(|info| info.definition = function.definition.clone())
+                .or_insert(function);
+        }
+        Ok(info_set.into_values().collect())
+    }
+}
+
+/// Instrument a file, adding autometrics annotations as necessary.
+///
+/// Each language is responsible to reuse its queries/create additonal queries to add the
+/// necessary code and produce a new version of the file that has _all_ functions instrumented.
+///
+/// The invariant to maintain here is that after being done with a file, all functions defined
+/// in the file should be instrumented.
+pub trait InstrumentFile {
+    /// Instrument all functions in the file
+    fn instrument_source_code(&mut self, source: &str) -> Result<String>;
+    /// Instrument all functions under the given project.
+    fn instrument_project(
+        &mut self,
+        project_root: &Path,
+        exclude_patterns: Option<&ignore::gitignore::Gitignore>,
+    ) -> Result<()>;
 }
 
 pub type Result<T> = std::result::Result<T, AmlError>;
@@ -192,6 +248,16 @@ pub enum AmlError {
     /// Issue when trying to extract a path to a project
     #[error("Invalid path to project")]
     InvalidPath,
+    /// Issue when trying to interact with the filesystem
+    #[error("I/O error when interacting with the filesystem")]
+    IO(#[from] std::io::Error),
+    /// Collection of issues when working with multiple projects
+    #[error("Some projects had errors: {}", 
+        .0.iter().fold(String::new(), |mut output, (path, err)| {
+            let _ = write!(output, "in {}: {}; ", path.display(), err);
+            output
+        }))]
+    Projects(Vec<(PathBuf, Self)>),
 }
 
 /// Languages supported by `am_list`.
@@ -246,19 +312,41 @@ pub fn list_all_project_functions(
     let projects = find_project_roots(root)?;
     let mut res: BTreeMap<PathBuf, (Language, Vec<FunctionInfo>)> = BTreeMap::new();
 
-    // TODO: try to parallelize this loop if possible
-    for (path, language) in projects.iter() {
-        info!(
-            "Listing functions in {} (Language: {})",
-            path.display(),
-            language
-        );
-        let project_fns = list_single_project_functions(path, *language, true)?;
+    let per_project_results = projects
+        .into_par_iter()
+        .map(|(path, language)| {
+            info!(
+                "Listing functions in {} (Language: {})",
+                path.display(),
+                language
+            );
+            match list_single_project_functions(&path, language, true) {
+                Ok(project_fns) => Ok((path.clone(), language, project_fns)),
+                Err(err) => Err((path.clone(), err)),
+            }
+        })
+        .collect::<Vec<_>>();
 
-        res.entry(path.to_path_buf())
-            .or_insert_with(|| (*language, Vec::new()))
-            .1
-            .extend(project_fns);
+    // This filter_map collects the errors into a single one, and has the side-effect of
+    // filling the Ok result in case no error happened along the way.
+    // This is done in a second step rather than within the par_iter because of the mutation
+    // that needs to happen in the resulting map.
+    let errors = per_project_results
+        .into_iter()
+        .filter_map(|result| match result {
+            Ok((path, language, project_fns)) => {
+                res.entry(path.to_path_buf())
+                    .or_insert_with(|| (language, Vec::new()))
+                    .1
+                    .extend(project_fns);
+                None
+            }
+            Err(err) => Some(err),
+        })
+        .collect::<Vec<_>>();
+
+    if !errors.is_empty() {
+        return Err(AmlError::Projects(errors));
     }
 
     Ok(res)
@@ -282,4 +370,50 @@ pub fn list_single_project_functions(
     };
     res.sort();
     Ok(res)
+}
+
+pub fn instrument_all_project_files(
+    root: &Path,
+    exclude_patterns: &ignore::gitignore::Gitignore,
+) -> Result<()> {
+    let projects = find_project_roots(root)?;
+
+    let errors = projects
+        .into_par_iter()
+        .filter_map(|(path, language)| {
+            info!(
+                "Instrumenting functions in {} (Language: {})",
+                path.display(),
+                language
+            );
+
+            if let Some(err) =
+                instrument_single_project_files(&path, language, exclude_patterns).err()
+            {
+                return Some((path.clone(), err));
+            }
+
+            None
+        })
+        .collect::<Vec<_>>();
+
+    if !errors.is_empty() {
+        return Err(AmlError::Projects(errors));
+    }
+
+    Ok(())
+}
+
+pub fn instrument_single_project_files(
+    root: &Path,
+    language: Language,
+    exclude_patterns: &ignore::gitignore::Gitignore,
+) -> Result<()> {
+    let mut implementor: Box<dyn InstrumentFile> = match language {
+        Language::Rust => Box::new(crate::rust::Impl {}),
+        Language::Go => Box::new(crate::go::Impl {}),
+        Language::Typescript => Box::new(crate::typescript::Impl {}),
+        Language::Python => Box::new(crate::python::Impl {}),
+    };
+    implementor.instrument_project(root, Some(exclude_patterns))
 }

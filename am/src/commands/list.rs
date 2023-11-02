@@ -3,10 +3,6 @@ use clap::{Args, Subcommand};
 use std::path::PathBuf;
 use tracing::info;
 
-// TODO(gagbo): add an additional subcommand that makes use of am_list::find_roots to
-// list all the functions under a given folder, by detecting the languages and all the
-// subprojects included.
-
 #[derive(Args)]
 pub struct Arguments {
     #[command(subcommand)]

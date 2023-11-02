@@ -108,11 +108,11 @@ const asyncCallMetricized = autometrics(async function asyncCall() {
         "list of all functions should have 2 items, got this instead: {all:?}"
     );
     assert!(
-        all.contains(&async_call),
+        all.iter().any(|info| info.inner_info == async_call),
         "List of all functions should contain {async_call:?}; complete list is {all:?}"
     );
     assert!(
-        all.contains(&resolve_after_half),
+        all.iter().any(|info| info.inner_info == resolve_after_half),
         "List of all functions should contain {resolve_after_half:?}; complete list is {all:?}"
     );
 }
@@ -205,7 +205,7 @@ fn detect_class() {
     let source = r#"
 import express from "express";
 
-@Autometrics
+@Autometrics()
 class Foo {
     x: number
     constructor(x = 0) {
@@ -335,19 +335,19 @@ class NotGood {
     );
 
     assert!(
-        all.contains(&foo_constructor),
+        all.iter().any(|info| info.inner_info == foo_constructor),
         "The list of all functions should contain {foo_constructor:?}; complete list is {all:?}"
     );
     assert!(
-        all.contains(&method_b),
+        all.iter().any(|info| info.inner_info == method_b),
         "The list of all functions should contain {method_b:?}; complete list is {all:?}"
     );
     assert!(
-        all.contains(&not_good_constructor),
+        all.iter().any(|info| info.inner_info == not_good_constructor),
         "The list of all functions should contain {not_good_constructor:?}; complete list is {all:?}"
     );
     assert!(
-        all.contains(&gotgot_method),
+        all.iter().any(|info| info.inner_info == gotgot_method),
         "The list of all functions should contain {gotgot_method:?}; complete list is {all:?}"
     );
 }
@@ -577,4 +577,138 @@ fn detect_two_args_wrapper() {
         0,
         "list of all functions should have 0 items, got this instead: {all:?}"
     );
+}
+
+#[test]
+fn instrument_multiple() {
+    let source = r#"
+import { Autometrics } from '@autometrics/autometrics';
+import express from "express";
+
+@Autometrics()
+class Foo {
+    x: number
+    constructor(x = 0) {
+        this.x = x;
+    }
+    method_b(): string {
+        return "you win";
+    }
+}
+
+class NotGood {
+    x: string
+    constructor(x = "got you") {
+        this.x = x;
+    }
+    gotgot(): string {
+        return "!";
+    }
+}
+        "#;
+
+    let expected = r#"
+import { Autometrics } from '@autometrics/autometrics';
+import express from "express";
+
+@Autometrics()
+class Foo {
+    x: number
+    constructor(x = 0) {
+        this.x = x;
+    }
+    method_b(): string {
+        return "you win";
+    }
+}
+
+class NotGood {
+    x: string
+@Autometrics()
+    constructor(x = "got you") {
+        this.x = x;
+    }
+@Autometrics()
+    gotgot(): string {
+        return "!";
+    }
+}
+        "#;
+
+    let mut implementation = Impl {};
+    let actual = implementation.instrument_source_code(source).unwrap();
+    assert_eq!(&actual, expected);
+}
+
+#[test]
+fn instrument_methods_and_top_level_function() {
+    let source = r#"
+class Foo {
+    method_b(): string {
+        return "you win";
+    }
+}
+
+function gotgot(): string {
+    return "!";
+}
+
+async function gotgotButAsync(): string {
+    return "!";
+}
+        "#;
+
+    let expected = r#"import { Autometrics } from '@autometrics/autometrics';
+
+class Foo {
+@Autometrics()
+    method_b(): string {
+        return "you win";
+    }
+}
+
+@Autometrics()
+function gotgot(): string {
+    return "!";
+}
+
+@Autometrics()
+async function gotgotButAsync(): string {
+    return "!";
+}
+        "#;
+
+    let mut implementation = Impl {};
+    let actual = implementation.instrument_source_code(source).unwrap();
+    assert_eq!(&actual, expected);
+}
+
+#[test]
+fn instrument_function_assignment() {
+    let source = r#"
+
+const bang = async (argument) => string {
+    return "!";
+};
+
+const bang_too = async function (): string {
+    return "!";
+};
+        "#;
+
+    let expected = r#"import { autometrics } from '@autometrics/autometrics';
+
+
+const bang = autometrics(async (argument) => string {
+    return "!";
+});
+
+const bang_too = autometrics(async function (): string {
+    return "!";
+});
+        "#;
+
+    let mut implementation = Impl {};
+    let actual = implementation.instrument_source_code(source).unwrap();
+    assert_eq!(&actual, expected);
 }

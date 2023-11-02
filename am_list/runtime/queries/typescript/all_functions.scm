@@ -7,7 +7,12 @@
 (lexical_declaration
  (variable_declarator
   name: (identifier) @func.name
-  value: (arrow_function)))
+  value: (arrow_function) @func.value))
+
+(lexical_declaration
+ (variable_declarator
+  name: (identifier) @func.name
+  value: (function) @func.value))
 
 (class_declaration
  name: (type_identifier) @type.name

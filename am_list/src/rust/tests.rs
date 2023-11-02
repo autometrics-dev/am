@@ -482,3 +482,82 @@ fn detect_partially_annotated_impl_block() {
         "Expecting the list to contain {dummy:?}\nComplete list is {all:?}"
     );
 }
+
+#[test]
+fn instrument_method() {
+    let source = r#"
+        impl Foo for Bar {
+            fn bar(&mut self) -> Self {
+                todo!()
+            }
+        }
+        "#;
+
+    let expected = r#"
+        impl Foo for Bar {
+#[autometrics::autometrics]
+            fn bar(&mut self) -> Self {
+                todo!()
+            }
+        }
+        "#;
+
+    let mut implementation = Impl {};
+    let actual = implementation.instrument_source_code(source).unwrap();
+    assert_eq!(&actual, expected);
+}
+
+#[test]
+fn instrument_multiple() {
+    let source = r#"use autometrics::autometrics;
+
+        fn not_the_one() {
+            todo!()
+        }
+
+        #[autometrics]
+        fn sandwiched_function() {
+            todo!()
+        }
+
+        impl Stuff {
+            fn not_that_one_either(&self) {
+            }
+        }
+
+        #[autometrics]
+        impl AMStuff {
+            fn not_that_one_either(&self) {
+            }
+        }
+        "#;
+
+    let expected = r#"use autometrics::autometrics;
+
+#[autometrics::autometrics]
+        fn not_the_one() {
+            todo!()
+        }
+
+        #[autometrics]
+        fn sandwiched_function() {
+            todo!()
+        }
+
+        impl Stuff {
+#[autometrics::autometrics]
+            fn not_that_one_either(&self) {
+            }
+        }
+
+        #[autometrics]
+        impl AMStuff {
+            fn not_that_one_either(&self) {
+            }
+        }
+        "#;
+
+    let mut implementation = Impl {};
+    let actual = implementation.instrument_source_code(source).unwrap();
+    assert_eq!(&actual, expected);
+}
