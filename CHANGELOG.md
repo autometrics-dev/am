@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
--
+- Update octocrab dependency to get rid of a bunch of duplicate crates (#157)
 
 ## [0.6.0]
 
