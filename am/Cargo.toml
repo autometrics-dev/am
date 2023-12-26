@@ -15,7 +15,7 @@ build = "build.rs"
 [dependencies]
 am_list = { path = "../am_list" }
 anyhow = { workspace = true }
-autometrics = { version = "0.6.0", features = ["prometheus-exporter"] }
+autometrics = { version = "1.0.0", features = ["prometheus-exporter"] }
 autometrics-am = { path = "../autometrics-am" }
 axum = "0.6.18"
 clap = { version = "4.2.7", features = ["derive", "env"] }
